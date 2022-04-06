@@ -10,11 +10,11 @@ import (
 	"github.com/percona/percona-toolkit/src/go/mongolib/fingerprinter"
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
 	mongostats "github.com/percona/percona-toolkit/src/go/mongolib/stats"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/pmm/proto/qan"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 
-	"github.com/percona/qan-agent/qan/analyzer/mongo/status"
-	"github.com/percona/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/status"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 )
 
 const (

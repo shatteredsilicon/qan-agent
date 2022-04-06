@@ -28,13 +28,13 @@ import (
 	"github.com/percona/go-mysql/log"
 	parser "github.com/percona/go-mysql/log/slow"
 	"github.com/percona/go-mysql/query"
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/config"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
-	"github.com/percona/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 type WorkerFactory interface {

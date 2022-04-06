@@ -18,7 +18,7 @@
 package mock
 
 import (
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 	"golang.org/x/net/websocket"
 )
 

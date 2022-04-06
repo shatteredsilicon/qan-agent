@@ -24,17 +24,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/data"
-	"github.com/percona/qan-agent/mrms"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/util"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/worker"
-	"github.com/percona/qan-agent/qan/analyzer/report"
-	"github.com/percona/qan-agent/ticker"
+	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/mrms"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/qan-agent/ticker"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 const MIN_SLOWLOG_ROTATION_SIZE int64 = 4096

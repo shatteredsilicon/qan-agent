@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nu7hatch/gouuid"
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/agent/release"
-	"github.com/percona/qan-agent/instance"
-	"github.com/percona/qan-agent/pct"
+	uuid "github.com/nu7hatch/gouuid"
+	"github.com/shatteredsilicon/qan-agent/agent/release"
+	"github.com/shatteredsilicon/qan-agent/instance"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 type Flags struct {

@@ -20,7 +20,7 @@ package util
 import (
 	"testing"
 
-	pc "github.com/percona/pmm/proto/config"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -18,7 +18,7 @@
 package pct
 
 import (
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type ServiceManager interface {

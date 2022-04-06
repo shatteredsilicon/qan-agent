@@ -18,7 +18,7 @@
 package mock
 
 import (
-	"github.com/percona/qan-agent/ticker"
+	"github.com/shatteredsilicon/qan-agent/ticker"
 )
 
 type TickerFactory struct {

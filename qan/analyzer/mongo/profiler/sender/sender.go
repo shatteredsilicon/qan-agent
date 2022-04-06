@@ -3,11 +3,11 @@ package sender
 import (
 	"sync"
 
-	"github.com/percona/pmm/proto/qan"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 
-	"github.com/percona/qan-agent/data"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mongo/status"
+	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/status"
 )
 
 func New(reportChan <-chan *qan.Report, spool data.Spooler, logger *pct.Logger) *Sender {

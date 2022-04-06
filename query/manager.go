@@ -22,13 +22,13 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/instance"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/query/plugin"
-	"github.com/percona/qan-agent/query/plugin/mongo"
-	"github.com/percona/qan-agent/query/plugin/mysql"
-	"github.com/percona/qan-agent/query/plugin/os"
+	"github.com/shatteredsilicon/qan-agent/instance"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/query/plugin"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/os"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 const (

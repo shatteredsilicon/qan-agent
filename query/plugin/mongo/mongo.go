@@ -20,10 +20,10 @@ package mongo
 import (
 	"encoding/json"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/query/plugin"
-	"github.com/percona/qan-agent/query/plugin/mongo/explain"
-	"github.com/percona/qan-agent/query/plugin/mongo/summary"
+	"github.com/shatteredsilicon/qan-agent/query/plugin"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/explain"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/summary"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 // verify, at compile time, if main struct implements plugin interface

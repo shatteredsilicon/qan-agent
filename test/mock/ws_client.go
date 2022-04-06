@@ -20,7 +20,7 @@ package mock
 import (
 	"sync"
 
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 	"golang.org/x/net/websocket"
 )
 

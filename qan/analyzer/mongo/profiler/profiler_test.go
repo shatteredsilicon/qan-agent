@@ -5,15 +5,15 @@ import (
 	"time"
 
 	"github.com/percona/pmgo"
-	"github.com/percona/pmm/proto"
-	"github.com/percona/pmm/proto/config"
-	"github.com/percona/pmm/proto/qan"
+	"github.com/shatteredsilicon/ssm/proto"
+	"github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/test/mock"
-	"github.com/percona/qan-agent/test/profiling"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/test/mock"
+	"github.com/shatteredsilicon/qan-agent/test/profiling"
 )
 
 func TestCollectingAndSendingData(t *testing.T) {

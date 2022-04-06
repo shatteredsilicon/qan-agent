@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/percona/qan-agent/test"
-	"github.com/percona/qan-agent/test/mock"
-	"github.com/percona/qan-agent/ticker"
+	"github.com/shatteredsilicon/qan-agent/test"
+	"github.com/shatteredsilicon/qan-agent/test/mock"
+	"github.com/shatteredsilicon/qan-agent/ticker"
 	"gopkg.in/check.v1"
 )
 

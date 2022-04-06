@@ -23,7 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 func (f *FakeApi) AppendPing() {

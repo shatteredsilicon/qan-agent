@@ -21,16 +21,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 
-	"github.com/percona/qan-agent/data"
-	"github.com/percona/qan-agent/instance"
-	"github.com/percona/qan-agent/mrms"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer"
-	mongoAnalyzer "github.com/percona/qan-agent/qan/analyzer/mongo"
-	mysqlAnalyzer "github.com/percona/qan-agent/qan/analyzer/mysql"
-	"github.com/percona/qan-agent/ticker"
+	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/instance"
+	"github.com/shatteredsilicon/qan-agent/mrms"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
+	mongoAnalyzer "github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo"
+	mysqlAnalyzer "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql"
+	"github.com/shatteredsilicon/qan-agent/ticker"
 )
 
 const pkg = "factory"

@@ -24,8 +24,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

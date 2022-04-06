@@ -4,13 +4,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/pmm/proto/qan"
+	"github.com/shatteredsilicon/ssm/proto"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/require"
 
-	"github.com/percona/qan-agent/data"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/test/mock"
+	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/test/mock"
 )
 
 func TestNew(t *testing.T) {

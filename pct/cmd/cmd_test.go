@@ -22,7 +22,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/percona/qan-agent/pct/cmd"
+	"github.com/shatteredsilicon/qan-agent/pct/cmd"
 	. "gopkg.in/check.v1"
 )
 

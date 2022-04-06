@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"strings"
 
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 var (

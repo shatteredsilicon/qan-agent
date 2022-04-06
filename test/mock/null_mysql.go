@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 var ERR_NOT_FOUND = errors.New("var not found in NullMySQL mock")

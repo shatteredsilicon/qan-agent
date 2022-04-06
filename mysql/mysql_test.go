@@ -23,7 +23,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/stretchr/testify/require"
 	. "gopkg.in/check.v1"
 )

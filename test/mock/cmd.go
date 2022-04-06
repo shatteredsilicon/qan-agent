@@ -18,7 +18,7 @@
 package mock
 
 import (
-	"github.com/percona/qan-agent/pct/cmd"
+	"github.com/shatteredsilicon/qan-agent/pct/cmd"
 )
 
 type CmdFactory struct {

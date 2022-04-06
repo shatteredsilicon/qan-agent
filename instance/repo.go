@@ -26,8 +26,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type ByUUID []proto.Instance

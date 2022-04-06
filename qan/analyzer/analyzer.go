@@ -18,8 +18,8 @@
 package analyzer
 
 import (
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 // AnalyzerFactory makes an Analyzer, real or mock.

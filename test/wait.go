@@ -25,8 +25,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 var Ts, _ = time.Parse("2006-01-02 15:04:05", "2013-12-30 18:36:00")

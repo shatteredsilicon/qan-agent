@@ -18,9 +18,9 @@
 package qan_worker
 
 import (
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
-	"github.com/percona/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 type QanWorker struct {

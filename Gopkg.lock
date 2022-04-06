@@ -112,8 +112,8 @@
   version = "0.5.2"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/percona/pmm"
+  branch = "1.x"
+  name = "github.com/shatteredsilicon/ssm"
   packages = [
     "proto",
     "proto/config",

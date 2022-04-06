@@ -20,9 +20,9 @@ package interval_iter
 import (
 	"time"
 
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/worker/slowlog"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/slowlog"
 )
 
 type IntervalIterFactory struct {

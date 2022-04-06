@@ -22,7 +22,7 @@ import (
 
 	"github.com/percona/percona-toolkit/src/go/mongolib/explain"
 	"github.com/percona/pmgo"
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 	"gopkg.in/mgo.v2"
 )
 

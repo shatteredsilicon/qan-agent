@@ -6,14 +6,14 @@ import (
 	"sync"
 
 	"github.com/percona/pmgo"
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 
-	"github.com/percona/qan-agent/data"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer"
-	"github.com/percona/qan-agent/qan/analyzer/mongo/profiler"
-	"github.com/percona/qan-agent/qan/analyzer/mongo/profiler/aggregator"
+	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
 )
 
 func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {

@@ -20,12 +20,12 @@ package mysql
 import (
 	"encoding/json"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/query/plugin"
-	"github.com/percona/qan-agent/query/plugin/mysql/explain"
-	"github.com/percona/qan-agent/query/plugin/mysql/summary"
-	"github.com/percona/qan-agent/query/plugin/mysql/tableinfo"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/query/plugin"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/explain"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/summary"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/tableinfo"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 // verify, at compile time, if main struct implements plugin interface

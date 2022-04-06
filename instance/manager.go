@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/dsn"
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mrms"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/mrms"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 var (
@@ -139,7 +139,7 @@ func GetMySQLInfo(in *proto.Instance) error {
 		return err
 	}
 	defer conn.Close()
-	sql := "SELECT /* percona-qan-agent */" +
+	sql := "SELECT /* ssm-qan-agent */" +
 		" CONCAT_WS('.', @@hostname, IF(@@port='3306',NULL,@@port)) AS Hostname," +
 		" @@version_comment AS Distro," +
 		" @@version AS Version"

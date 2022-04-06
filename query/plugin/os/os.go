@@ -18,9 +18,9 @@
 package os
 
 import (
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/query/plugin"
-	"github.com/percona/qan-agent/query/plugin/os/summary"
+	"github.com/shatteredsilicon/qan-agent/query/plugin"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/os/summary"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 // verify, at compile time, if main struct implements plugin interface

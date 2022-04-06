@@ -26,12 +26,12 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/event"
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
-	"github.com/percona/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 // A DigestRow is a row from performance_schema.events_statements_summary_by_digest.

@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfoResult, error) {

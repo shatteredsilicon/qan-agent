@@ -28,7 +28,7 @@ import (
 	"github.com/Masterminds/semver"
 	"github.com/go-sql-driver/mysql"
 	"github.com/percona/go-mysql/dsn"
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/pct"
 )
 
 var (

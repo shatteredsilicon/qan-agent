@@ -25,10 +25,10 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/dsn"
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mrms/checker"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/mrms/checker"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 const MONITOR_NAME = "mrm-monitor"
