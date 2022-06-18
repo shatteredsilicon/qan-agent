@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/percona/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/data"
 	. "gopkg.in/check.v1"
 )
 

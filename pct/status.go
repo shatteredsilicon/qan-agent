@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type StatusReporter interface {

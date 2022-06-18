@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mrms"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/test/mock"
+	"github.com/shatteredsilicon/qan-agent/mrms"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/test/mock"
+	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/stretchr/testify/require"
 	. "gopkg.in/check.v1"
 )

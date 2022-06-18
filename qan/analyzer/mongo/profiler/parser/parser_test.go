@@ -6,12 +6,12 @@ import (
 	"time"
 
 	pm "github.com/percona/percona-toolkit/src/go/mongolib/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/pmm/proto/qan"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/percona/qan-agent/qan/analyzer/mongo/profiler/aggregator"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
 )
 
 func TestNew(t *testing.T) {

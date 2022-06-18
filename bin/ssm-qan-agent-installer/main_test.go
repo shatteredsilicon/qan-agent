@@ -26,11 +26,11 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/test/cmdtest"
-	"github.com/percona/qan-agent/test/fakeapi"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/test/cmdtest"
+	"github.com/shatteredsilicon/qan-agent/test/fakeapi"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/stretchr/testify/suite"
 )
 

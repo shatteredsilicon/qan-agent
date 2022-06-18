@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/event"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
-	. "github.com/percona/qan-agent/test/rootdir"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	. "github.com/shatteredsilicon/qan-agent/test/rootdir"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

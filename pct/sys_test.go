@@ -20,7 +20,7 @@ package pct_test
 import (
 	"os"
 
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/pct"
 	. "gopkg.in/check.v1"
 )
 

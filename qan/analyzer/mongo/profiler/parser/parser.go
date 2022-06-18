@@ -6,8 +6,8 @@ import (
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
 	mstats "github.com/percona/percona-toolkit/src/go/mongolib/stats"
 
-	"github.com/percona/qan-agent/qan/analyzer/mongo/profiler/aggregator"
-	"github.com/percona/qan-agent/qan/analyzer/mongo/status"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/status"
 )
 
 func New(

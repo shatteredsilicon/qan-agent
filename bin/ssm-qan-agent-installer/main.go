@@ -25,11 +25,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/bin/percona-qan-agent-installer/installer"
-	"github.com/percona/qan-agent/instance"
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/bin/ssm-qan-agent-installer/installer"
+	"github.com/shatteredsilicon/qan-agent/instance"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 var (

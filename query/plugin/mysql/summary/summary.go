@@ -21,7 +21,7 @@ import (
 	"net"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/percona/qan-agent/pct/cmd"
+	"github.com/shatteredsilicon/qan-agent/pct/cmd"
 )
 
 // Summary executes `pt-mysql-summary` for given dsn

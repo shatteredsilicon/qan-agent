@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/event"
-	"github.com/percona/pmm/proto/metrics"
-	"github.com/percona/pmm/proto/query"
+	"github.com/shatteredsilicon/ssm/proto/metrics"
+	"github.com/shatteredsilicon/ssm/proto/query"
 )
 
 type Report struct {

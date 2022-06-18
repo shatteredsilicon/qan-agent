@@ -21,12 +21,12 @@ import (
 	"path"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/worker/perfschema"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/worker/slowlog"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/perfschema"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/slowlog"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type RealIntervalIterFactory struct {

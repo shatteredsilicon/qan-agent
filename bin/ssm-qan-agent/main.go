@@ -29,22 +29,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/agent"
-	"github.com/percona/qan-agent/agent/release"
-	"github.com/percona/qan-agent/client"
-	"github.com/percona/qan-agent/data"
-	"github.com/percona/qan-agent/instance"
-	"github.com/percona/qan-agent/log"
-	"github.com/percona/qan-agent/mrms"
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
-	pctCmd "github.com/percona/qan-agent/pct/cmd"
-	"github.com/percona/qan-agent/qan"
-	qanAnalyzerFactory "github.com/percona/qan-agent/qan/analyzer/factory"
-	"github.com/percona/qan-agent/query"
-	"github.com/percona/qan-agent/ticker"
+	"github.com/shatteredsilicon/qan-agent/agent"
+	"github.com/shatteredsilicon/qan-agent/agent/release"
+	"github.com/shatteredsilicon/qan-agent/client"
+	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/instance"
+	"github.com/shatteredsilicon/qan-agent/log"
+	"github.com/shatteredsilicon/qan-agent/mrms"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	pctCmd "github.com/shatteredsilicon/qan-agent/pct/cmd"
+	"github.com/shatteredsilicon/qan-agent/qan"
+	qanAnalyzerFactory "github.com/shatteredsilicon/qan-agent/qan/analyzer/factory"
+	"github.com/shatteredsilicon/qan-agent/query"
+	"github.com/shatteredsilicon/qan-agent/ticker"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 var (
@@ -65,7 +65,7 @@ func init() {
 
 	// PMM-1842: TODO: pid-file is now dummy flag to keep backward compatibility, it's not used anymore.
 	// Remove it after we decide v1.0.5 is old enough to not be supported.
-	// https://github.com/percona/pmm-client/commit/2dd9f028e6f8930f9f0185d13f2053d3683b8e64#diff-10f4cb4dc1c681a08cdba7b20c30b3f1
+	// https://github.com/shatteredsilicon/ssm-client/commit/2dd9f028e6f8930f9f0185d13f2053d3683b8e64#diff-10f4cb4dc1c681a08cdba7b20c30b3f1
 	flag.StringVar(&flagPidFile, "pid-file", "", "PID file")
 
 	flag.StringVar(&flagBasedir, "basedir", pct.DEFAULT_BASEDIR, "Agent basedir")
@@ -87,7 +87,7 @@ func main() {
 	// Handle options like -version which don't start the agent.
 	// //////////////////////////////////////////////////////////////////////
 
-	agentVersion := fmt.Sprintf("percona-qan-agent %s", release.VERSION)
+	agentVersion := fmt.Sprintf("ssm-qan-agent %s", release.VERSION)
 	if flagVersion {
 		fmt.Println(agentVersion)
 		return

@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/percona/pmgo"
-	pc "github.com/percona/pmm/proto/config"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 
-	"github.com/percona/qan-agent/data"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mongo/profiler/aggregator"
-	"github.com/percona/qan-agent/qan/analyzer/mongo/profiler/sender"
+	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/sender"
 )
 
 func New(

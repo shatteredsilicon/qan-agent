@@ -20,7 +20,7 @@ package metrics
 import (
 	"fmt"
 
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 var StatNames []string = []string{

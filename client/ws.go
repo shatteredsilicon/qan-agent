@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/ssm/proto"
 	"golang.org/x/net/websocket"
 )
 

@@ -20,8 +20,8 @@ package perfschema
 import (
 	"time"
 
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 )
 
 type Iter struct {

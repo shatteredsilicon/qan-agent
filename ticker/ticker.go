@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/pct"
 )
 
 type Ticker interface {

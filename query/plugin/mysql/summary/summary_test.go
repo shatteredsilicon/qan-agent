@@ -21,14 +21,14 @@ import (
 	"os"
 	"testing"
 
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSummary(t *testing.T) {
 	// PMM-2569
-	// https://github.com/percona/qan-agent/pull/90
+	// https://github.com/shatteredsilicon/qan-agent/pull/90
 	// https://github.com/percona/percona-toolkit/pull/337
 	{
 		dsn := os.Getenv("PCT_TEST_MYSQL_DSN")

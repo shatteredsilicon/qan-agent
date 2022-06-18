@@ -33,12 +33,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/agent/release"
-	"github.com/percona/qan-agent/pct"
-	pctCmd "github.com/percona/qan-agent/pct/cmd"
 	"github.com/pkg/errors"
+	"github.com/shatteredsilicon/qan-agent/agent/release"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	pctCmd "github.com/shatteredsilicon/qan-agent/pct/cmd"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 const (

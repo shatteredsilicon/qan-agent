@@ -18,7 +18,7 @@
 package plugin
 
 import (
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type Plugin interface {

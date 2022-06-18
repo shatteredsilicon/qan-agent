@@ -3,7 +3,7 @@ package util
 import (
 	"fmt"
 
-	pc "github.com/percona/pmm/proto/config"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 func GetMySQLConfig(config pc.QAN) ([]string, []string, error) {

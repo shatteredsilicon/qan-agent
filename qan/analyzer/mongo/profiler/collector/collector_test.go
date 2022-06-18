@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/percona/qan-agent/test/profiling"
+	"github.com/shatteredsilicon/qan-agent/test/profiling"
 )
 
 func TestNew(t *testing.T) {

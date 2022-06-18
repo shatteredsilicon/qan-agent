@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	pc "github.com/percona/pmm/proto/config"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/stretchr/testify/require"
 )
 

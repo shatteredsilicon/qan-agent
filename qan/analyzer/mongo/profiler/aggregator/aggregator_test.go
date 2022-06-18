@@ -6,8 +6,8 @@ import (
 
 	"github.com/percona/go-mysql/event"
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/pmm/proto/qan"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

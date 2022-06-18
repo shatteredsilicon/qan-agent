@@ -22,10 +22,10 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/event"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/pmm/proto/qan"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
 // slowlog|perf schema --> Result --> qan.Report --> data.Spooler

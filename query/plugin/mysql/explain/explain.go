@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 func Explain(c mysql.Connector, db, query string, convert bool) (*proto.ExplainResult, error) {

@@ -34,8 +34,8 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/percona/pmm/proto"
-	"github.com/percona/qan-agent/agent/release"
+	"github.com/shatteredsilicon/qan-agent/agent/release"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 var requiredEntryLinks = []string{"agents", "instances"}

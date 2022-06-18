@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
 )
 
 // An Interval represents a period during which queries are fetched,

@@ -21,15 +21,15 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/percona/qan-agent/instance"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/test/mock"
-	"github.com/percona/qan-agent/test/profiling"
+	"github.com/shatteredsilicon/qan-agent/instance"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/test/mock"
+	"github.com/shatteredsilicon/qan-agent/test/profiling"
 )
 
 func TestFactory_MakeMongo(t *testing.T) {

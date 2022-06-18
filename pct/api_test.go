@@ -25,7 +25,7 @@ import (
 	"net/url"
 
 	"github.com/gorilla/mux"
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 
 	. "gopkg.in/check.v1"
 )

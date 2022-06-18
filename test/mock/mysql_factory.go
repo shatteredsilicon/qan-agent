@@ -18,7 +18,7 @@
 package mock
 
 import (
-	"github.com/percona/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/mysql"
 )
 
 type ConnectionFactory struct {

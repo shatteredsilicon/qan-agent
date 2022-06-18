@@ -19,7 +19,7 @@ package summary
 
 import (
 	"github.com/percona/pmgo"
-	"github.com/percona/qan-agent/pct/cmd"
+	"github.com/shatteredsilicon/qan-agent/pct/cmd"
 )
 
 // Summary executes `pt-mongodb-summary` for given dsn

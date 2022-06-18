@@ -9,7 +9,7 @@ import (
 	"github.com/percona/pmgo"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/percona/qan-agent/qan/analyzer/mongo/status"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/status"
 )
 
 const (

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/percona/pmm/proto"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type Logger struct {

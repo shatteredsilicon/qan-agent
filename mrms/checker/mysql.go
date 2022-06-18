@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/percona/qan-agent/mysql"
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
 )
 
 type MySQL struct {

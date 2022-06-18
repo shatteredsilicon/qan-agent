@@ -7,6 +7,6 @@ todo/
 tmp/
 update_dependencies.sh
 distro/
-build/percona-qan-agent*
-bin/percona-qan-agent/percona-qan-agent
-bin/percona-qan-agent-installer/percona-qan-agent-installer
+build/ssm-qan-agent*
+bin/ssm-qan-agent/ssm-qan-agent
+bin/ssm-qan-agent-installer/ssm-qan-agent-installer

@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/percona/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/pct"
 )
 
 var DebugStats = false

@@ -26,12 +26,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/percona/pmm/proto"
-	pc "github.com/percona/pmm/proto/config"
-	"github.com/percona/qan-agent/log"
-	"github.com/percona/qan-agent/pct"
-	"github.com/percona/qan-agent/test"
-	"github.com/percona/qan-agent/test/mock"
+	"github.com/shatteredsilicon/qan-agent/log"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/test"
+	"github.com/shatteredsilicon/qan-agent/test/mock"
+	"github.com/shatteredsilicon/ssm/proto"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/stretchr/testify/assert"
 	. "gopkg.in/check.v1"
 )
