@@ -3,6 +3,14 @@
   name = "github.com/go-sql-driver/mysql"
   version = "^1.4.0"
 
+[[override]]
+  name = "github.com/shirou/gopsutil"
+  version = "=v3.20.12"
+
+[[override]]
+  name = "github.com/percona/go-mysql"
+  branch = "master"
+
 [prune]
   non-go = true
   go-tests = true
