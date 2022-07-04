@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	DEFAULT_BASEDIR      = "/usr/local/percona/qan-agent"
+	DEFAULT_BASEDIR      = "/opt/ss/qan-agent"
 	CONFIG_FILE_SUFFIX   = ".conf"
 	INSTANCE_FILE_SUFFIX = ".json"
 	// Relative to Basedir.path:
