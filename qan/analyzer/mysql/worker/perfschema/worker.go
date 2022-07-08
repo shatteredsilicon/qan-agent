@@ -18,6 +18,7 @@
 package perfschema
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"math"
@@ -25,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/percona/go-mysql/event"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -65,6 +67,74 @@ type DigestRow struct {
 	SumNoGoodIndexUsed      uint64
 }
 
+// A PreStmtRow is a row from prepared_statements_instances
+type PreStmtRow struct {
+	StatementID             uint64
+	StatementName           string
+	SQLText                 string
+	TimerPrepare            uint64
+	CountReprepare          uint64
+	CountExecute            uint64
+	SumTimerExecute         uint64
+	MinTimerExecute         uint64
+	AvgTimerExecute         uint64
+	MaxTimerExecute         uint64
+	SumLockTime             uint64
+	SumErrors               uint64
+	SumWarnings             uint64
+	SumRowsAffected         uint64
+	SumRowsSent             uint64
+	SumRowsExamined         uint64
+	SumCreatedTmpDiskTables uint64 // bool in slow log
+	SumCreatedTmpTables     uint64 // bool in slow log
+	SumSelectFullJoin       uint64 // bool in slow log
+	SumSelectFullRangeJoin  uint64
+	SumSelectRange          uint64
+	SumSelectRangeCheck     uint64
+	SumSelectScan           uint64 // bool in slow log
+	SumSortMergePasses      uint64
+	SumSortRange            uint64
+	SumSortRows             uint64
+	SumSortScan             uint64
+	SumNoIndexUsed          uint64
+	SumNoGoodIndexUsed      uint64
+}
+
+// ConvertToDigestRow returns data in DigestRow form
+func (row *PreStmtRow) ConvertToDigestRow() *DigestRow {
+	digestRow := DigestRow{}
+
+	preStmtSQL := sha256.Sum256([]byte(fmt.Sprintf("PREPARE %s FROM %s", row.StatementName, row.SQLText)))
+	digestRow.Digest = fmt.Sprintf("%x", preStmtSQL)
+	digestRow.DigestText = row.SQLText
+	digestRow.CountStar = uint(row.CountExecute)
+	digestRow.SumTimerWait = row.SumTimerExecute
+	digestRow.MinTimerWait = row.MinTimerExecute
+	digestRow.AvgTimerWait = row.AvgTimerExecute
+	digestRow.MaxTimerWait = row.MaxTimerExecute
+	digestRow.SumLockTime = row.SumLockTime
+	digestRow.SumErrors = row.SumErrors
+	digestRow.SumWarnings = row.SumWarnings
+	digestRow.SumRowsAffected = row.SumRowsAffected
+	digestRow.SumRowsSent = row.SumRowsSent
+	digestRow.SumRowsExamined = row.SumRowsExamined
+	digestRow.SumCreatedTmpDiskTables = row.SumCreatedTmpDiskTables
+	digestRow.SumCreatedTmpTables = row.SumCreatedTmpTables
+	digestRow.SumSelectFullJoin = row.SumSelectFullJoin
+	digestRow.SumSelectFullRangeJoin = row.SumSelectFullRangeJoin
+	digestRow.SumSelectRange = row.SumSelectRange
+	digestRow.SumSelectRangeCheck = row.SumSelectRangeCheck
+	digestRow.SumSelectScan = row.SumSelectScan
+	digestRow.SumSortMergePasses = row.SumSortMergePasses
+	digestRow.SumSortRange = row.SumSortRange
+	digestRow.SumSortRows = row.SumSortRows
+	digestRow.SumSortScan = row.SumSortScan
+	digestRow.SumNoIndexUsed = row.SumNoIndexUsed
+	digestRow.SumNoGoodIndexUsed = row.SumNoGoodIndexUsed
+
+	return &digestRow
+}
+
 // A Class represents a single query and its per-schema instances.
 type Class struct {
 	DigestText string
@@ -72,7 +142,8 @@ type Class struct {
 }
 
 // A Snapshot represents all rows from performance_schema.events_statements_summary_by_digest
-// at a single time, grouped by digest into classes. Two consecutive Snapshots are needed to
+// and performance_schema.prepared_statements_instances at a single time,
+// grouped by digest into classes. Two consecutive Snapshots are needed to
 // produce a mysqlAnalyzer.Result.
 type Snapshot map[string]Class // keyed on digest (classId)
 
@@ -101,6 +172,7 @@ func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector) *Worker
 	getRows := func(c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error {
 		return GetDigestRows(mysqlConn, lastFetchSeconds, c, doneChan)
 	}
+
 	return NewWorker(pct.NewLogger(f.logChan, name), mysqlConn, getRows)
 }
 
@@ -201,6 +273,117 @@ SELECT
 			row.DigestText = strings.TrimSpace(row.DigestText)
 
 			c <- row
+		}
+		if err = rows.Err(); err != nil {
+			return // This bubbles up too (see above).
+		}
+
+		preStmtDoneChan := make(chan error, 1)
+		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan); err != nil {
+			return
+		}
+
+		err = <-preStmtDoneChan
+		if errCode, ok := err.(*mysqlDriver.MySQLError); ok && errCode.Number == 1146 {
+			// Ignore if it's a 'table not exists' error to
+			// be compatible with older mysql/mariadb versions
+			err = nil
+		}
+	}()
+	return nil
+}
+
+// GetPreStmtRows connects to MySQL through `mysql.Connector`,
+// fetches rows from prepared_stmtements_instances and converts rows into DigestRow structure,
+// delivers it over a channel, and notifies success or error through `doneChan`.
+func GetPreStmtRows(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error) error {
+	q := `
+SELECT
+	STATEMENT_ID,
+	COALESCE(STATEMENT_NAME, ''),
+	SQL_TEXT,
+	TIMER_PREPARE,
+	COUNT_REPREPARE,
+	COUNT_EXECUTE,
+	SUM_TIMER_EXECUTE,
+	MIN_TIMER_EXECUTE,
+	AVG_TIMER_EXECUTE,
+	MAX_TIMER_EXECUTE,
+	SUM_LOCK_TIME,
+	SUM_ERRORS,
+	SUM_WARNINGS,
+	SUM_ROWS_AFFECTED,
+	SUM_ROWS_SENT,
+	SUM_ROWS_EXAMINED,
+	SUM_CREATED_TMP_DISK_TABLES,
+	SUM_CREATED_TMP_TABLES,
+	SUM_SELECT_FULL_JOIN,
+	SUM_SELECT_FULL_RANGE_JOIN,
+	SUM_SELECT_RANGE,
+	SUM_SELECT_RANGE_CHECK,
+	SUM_SELECT_SCAN,
+	SUM_SORT_MERGE_PASSES,
+	SUM_SORT_RANGE,
+	SUM_SORT_ROWS,
+	SUM_SORT_SCAN,
+	SUM_NO_INDEX_USED,
+	SUM_NO_GOOD_INDEX_USED
+	FROM performance_schema.prepared_statements_instances
+`
+
+	rows, err := mysqlConn.DB().Query(q)
+	if err != nil {
+		// This bubbles up to the analyzer which logs it as an error:
+		//   0. Analyzer.Worker.Run()
+		//   1. Worker.Run().getSnapShot()
+		//   2. Worker.getSnapshot().getRows() (ptr to this func)
+		//   3. here
+		return err
+	}
+	go func() {
+		var err error
+		defer func() {
+			rows.Close()
+			doneChan <- err
+		}()
+		for rows.Next() {
+			row := &PreStmtRow{}
+			err = rows.Scan(
+				&row.StatementID,
+				&row.StatementName,
+				&row.SQLText,
+				&row.TimerPrepare,
+				&row.CountReprepare,
+				&row.CountExecute,
+				&row.SumTimerExecute,
+				&row.MinTimerExecute,
+				&row.AvgTimerExecute,
+				&row.MaxTimerExecute,
+				&row.SumLockTime,
+				&row.SumErrors,
+				&row.SumWarnings,
+				&row.SumRowsAffected,
+				&row.SumRowsSent,
+				&row.SumRowsExamined,
+				&row.SumCreatedTmpDiskTables,
+				&row.SumCreatedTmpTables,
+				&row.SumSelectFullJoin,
+				&row.SumSelectFullRangeJoin,
+				&row.SumSelectRange,
+				&row.SumSelectRangeCheck,
+				&row.SumSelectScan,
+				&row.SumSortMergePasses,
+				&row.SumSortRange,
+				&row.SumSortRows,
+				&row.SumSortScan,
+				&row.SumNoIndexUsed,
+				&row.SumNoGoodIndexUsed,
+			)
+			if err != nil {
+				return // This bubbles up too (see above).
+			}
+
+			c <- row.ConvertToDigestRow()
 		}
 		if err = rows.Err(); err != nil {
 			return // This bubbles up too (see above).
