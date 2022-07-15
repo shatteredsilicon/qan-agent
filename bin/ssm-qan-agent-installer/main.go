@@ -25,6 +25,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/bin/ssm-qan-agent-installer/installer"
 	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -44,7 +45,8 @@ var (
 	flagUseSSL         bool
 	flagUseInsecureSSL bool
 
-	flagHostname string
+	flagHostname       string
+	flagManagedAPIPath string
 )
 
 var fs *flag.FlagSet
@@ -62,6 +64,7 @@ func init() {
 	fs.StringVar(&flagServerPass, "server-pass", "", "Password to use for API auth")
 	fs.BoolVar(&flagUseSSL, "use-ssl", false, "Use ssl to connect to the API")
 	fs.BoolVar(&flagUseInsecureSSL, "use-insecure-ssl", false, "Use self signed certs when connecting to the API")
+	fs.StringVar(&flagManagedAPIPath, "managed-api-path", "managed", "ssm-managed api path")
 
 	hostname, _ := os.Hostname()
 	fs.StringVar(&flagHostname, "hostname", hostname, "OS instance hostname, defaults to local hostname")
@@ -96,13 +99,16 @@ func main() {
 	if qanAPIURL.Scheme == "https" {
 		flagUseSSL = true
 	}
-	agentConfig := &pc.Agent{
-		ApiHostname:       qanAPIURL.Host,
-		ApiPath:           qanAPIURL.Path,
-		ServerUser:        flagServerUser,
-		ServerPassword:    flagServerPass,
-		ServerSSL:         flagUseSSL,
-		ServerInsecureSSL: flagUseInsecureSSL,
+	agentConfig := &agent.AgentConfig{
+		Agent: &pc.Agent{
+			ApiHostname:       qanAPIURL.Host,
+			ApiPath:           qanAPIURL.Path,
+			ServerUser:        flagServerUser,
+			ServerPassword:    flagServerPass,
+			ServerSSL:         flagUseSSL,
+			ServerInsecureSSL: flagUseInsecureSSL,
+		},
+		ManagedAPIPath: flagManagedAPIPath,
 	}
 
 	flags := installer.Flags{

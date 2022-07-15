@@ -121,7 +121,7 @@ func ValidateConfig(setConfig pc.QAN) (pc.QAN, error) {
 	runConfig.UUID = setConfig.UUID
 
 	// Strings
-	if setConfig.CollectFrom != "slowlog" && setConfig.CollectFrom != "perfschema" {
+	if setConfig.CollectFrom != "slowlog" && setConfig.CollectFrom != "perfschema" && setConfig.CollectFrom != "rds-slowlog" {
 		return runConfig, fmt.Errorf("CollectFrom must be 'slowlog' or 'perfschema'")
 	}
 	runConfig.CollectFrom = setConfig.CollectFrom

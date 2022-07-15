@@ -15,7 +15,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>
 */
 
-package perfschema
+package rdsslowlog
 
 import (
 	"time"
@@ -24,22 +24,26 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 )
 
+type FilenameFunc func() (string, error)
+
 type Iter struct {
 	logger   *pct.Logger
 	tickChan chan time.Time
 	// --
+	intervalNo   int
 	intervalChan chan *iter.Interval
 	sync         *pct.SyncChan
 }
 
 func NewIter(logger *pct.Logger, tickChan chan time.Time) *Iter {
-	return &Iter{
+	iter := &Iter{
 		logger:   logger,
 		tickChan: tickChan,
 		// --
 		intervalChan: make(chan *iter.Interval, 1),
 		sync:         pct.NewSyncChan(),
 	}
+	return iter
 }
 
 func (i *Iter) Start() {
@@ -65,7 +69,7 @@ func (i *Iter) TickChan() chan time.Time {
 func (i *Iter) run() {
 	defer func() {
 		if err := recover(); err != nil {
-			i.logger.Error("QAN rds slow log iterator crashed: ", err)
+			i.logger.Error("slowlog.Iter crashed: ", err)
 		}
 		i.sync.Done()
 	}()

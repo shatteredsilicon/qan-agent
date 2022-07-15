@@ -10,6 +10,8 @@ func GetMySQLConfig(config pc.QAN) ([]string, []string, error) {
 	switch config.CollectFrom {
 	case "slowlog":
 		return makeSlowLogConfig()
+	case "rds-slowlog":
+		return makeRDSSlowLogConfig()
 	case "perfschema":
 		return makePerfSchemaConfig()
 	default:
@@ -31,6 +33,10 @@ func makeSlowLogConfig() ([]string, []string, error) {
 		"SET time_zone='+0:00'",
 	)
 	return on, off, nil
+}
+
+func makeRDSSlowLogConfig() ([]string, []string, error) {
+	return []string{"SET time_zone='+0:00'"}, []string{}, nil
 }
 
 func makePerfSchemaConfig() ([]string, []string, error) {
