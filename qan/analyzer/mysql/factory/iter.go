@@ -25,6 +25,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/perfschema"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/rdsslowlog"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/slowlog"
 	"github.com/shatteredsilicon/ssm/proto"
 )
@@ -65,6 +66,8 @@ func (f *RealIntervalIterFactory) Make(analyzerType string, mysqlConn mysql.Conn
 			return filename, nil
 		}
 		return slowlog.NewIter(pct.NewLogger(f.logChan, "qan-interval"), getSlowLogFunc, tickChan)
+	case "rds-slowlog":
+		return rdsslowlog.NewIter(pct.NewLogger(f.logChan, "qan-interval"), tickChan)
 	case "perfschema":
 		return perfschema.NewIter(pct.NewLogger(f.logChan, "qan-interval"), tickChan)
 	default:

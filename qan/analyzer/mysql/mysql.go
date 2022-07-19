@@ -15,6 +15,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/perfschema"
+	rdsslowlog "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/rdsslowlog"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/slowlog"
 	"github.com/shatteredsilicon/qan-agent/ticker"
 	"github.com/shatteredsilicon/ssm/proto"
@@ -36,6 +37,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 	iterFactory := factory.NewRealIntervalIterFactory(logChan)
 	slowlogWorkerFactory := slowlog.NewRealWorkerFactory(logChan)
 	perfschemaWorkerFactory := perfschema.NewRealWorkerFactory(logChan)
+	rdsSlowlogWorkerFactory := rdsslowlog.NewRealWorkerFactory(logChan)
 	mysqlConnFactory := &mysql.RealConnectionFactory{}
 
 	// return initialized MySQLAnalyzer
@@ -52,6 +54,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 		iterFactory:             iterFactory,
 		slowlogWorkerFactory:    slowlogWorkerFactory,
 		perfschemaWorkerFactory: perfschemaWorkerFactory,
+		rdsSlowlogWorkerFactory: rdsSlowlogWorkerFactory,
 		mysqlConnFactory:        mysqlConnFactory,
 	}
 }
@@ -71,6 +74,7 @@ type MySQLAnalyzer struct {
 	iterFactory             iter.IntervalIterFactory
 	slowlogWorkerFactory    slowlog.WorkerFactory
 	perfschemaWorkerFactory perfschema.WorkerFactory
+	rdsSlowlogWorkerFactory rdsslowlog.WorkerFactory
 	mysqlConnFactory        mysql.ConnectionFactory
 	// real analyzer channels
 	tickChan    chan time.Time
@@ -125,6 +129,8 @@ func (m *MySQLAnalyzer) Start() error {
 		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
 	case "perfschema":
 		worker = m.perfschemaWorkerFactory.Make(name+"-worker", mysqlConn)
+	case "rds-slowlog":
+		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
 	default:
 		panic("Invalid analyzerType: " + analyzerType)
 	}

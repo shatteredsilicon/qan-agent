@@ -23,11 +23,11 @@ import (
 	"strings"
 
 	uuid "github.com/nu7hatch/gouuid"
+	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/agent/release"
 	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 type Flags struct {
@@ -40,7 +40,7 @@ type Installer struct {
 	basedir      string
 	api          pct.APIConnector
 	instanceRepo *instance.Repo
-	agentConfig  *pc.Agent
+	agentConfig  *agent.AgentConfig
 	hostname     string
 	flags        Flags
 	// --
@@ -58,7 +58,7 @@ func newUUID() string {
 	return strings.Replace(u4.String(), "-", "", -1)
 }
 
-func NewInstaller(basedir string, api pct.APIConnector, instanceRepo *instance.Repo, agentConfig *pc.Agent, hostname string, flags Flags) (*Installer, error) {
+func NewInstaller(basedir string, api pct.APIConnector, instanceRepo *instance.Repo, agentConfig *agent.AgentConfig, hostname string, flags Flags) (*Installer, error) {
 	installer := &Installer{
 		basedir:      basedir,
 		api:          api,

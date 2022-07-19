@@ -44,7 +44,6 @@ import (
 	"github.com/shatteredsilicon/qan-agent/query"
 	"github.com/shatteredsilicon/qan-agent/ticker"
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 var (
@@ -110,7 +109,7 @@ func main() {
 		fmt.Printf("Error reading agent config file %s: %s\n", agentConfigFile, err)
 		os.Exit(1)
 	}
-	agentConfig := &pc.Agent{}
+	agentConfig := &agent.AgentConfig{}
 	if err := json.Unmarshal(bytes, agentConfig); err != nil {
 		fmt.Printf("Error decoding agent config file %s: %s\n", agentConfigFile, err)
 		os.Exit(1)
@@ -149,7 +148,7 @@ func main() {
 	}
 }
 
-func run(agentConfig *pc.Agent) error {
+func run(agentConfig *agent.AgentConfig) error {
 	golog.Println("Starting agent...")
 	var stopErr error
 	defer func() {

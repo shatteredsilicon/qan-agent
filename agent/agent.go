@@ -57,7 +57,7 @@ var (
 )
 
 type Agent struct {
-	config    *pc.Agent
+	config    *AgentConfig
 	configMux *sync.RWMutex
 	configDir string
 	logger    *pct.Logger
@@ -76,12 +76,17 @@ type Agent struct {
 	statusHandlerSync *pct.SyncChan
 }
 
+type AgentConfig struct {
+	*pc.Agent
+	ManagedAPIPath string
+}
+
 type CollectInfoData struct {
 	Filename string
 	Data     []byte
 }
 
-func NewAgent(config *pc.Agent, logger *pct.Logger, client pct.WebsocketClient, addr string, services map[string]pct.ServiceManager) *Agent {
+func NewAgent(config *AgentConfig, logger *pct.Logger, client pct.WebsocketClient, addr string, services map[string]pct.ServiceManager) *Agent {
 	agent := &Agent{
 		config:    config,
 		configMux: &sync.RWMutex{},
@@ -294,7 +299,7 @@ func (agent *Agent) stop() {
 }
 
 func LoadConfig() ([]byte, error) {
-	config := &pc.Agent{}
+	config := &AgentConfig{}
 	_, err := pct.Basedir.ReadConfig("agent", config)
 	if err != nil {
 		return nil, err

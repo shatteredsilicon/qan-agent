@@ -54,7 +54,7 @@ type AgentTestSuite struct {
 	logChan chan proto.LogEntry
 	// Agent
 	agent        *Agent
-	config       *pc.Agent
+	config       *AgentConfig
 	services     map[string]pct.ServiceManager
 	servicesMap  map[string]pct.ServiceManager
 	client       *mock.WebsocketClient
@@ -90,10 +90,13 @@ func (s *AgentTestSuite) SetUpSuite(t *C) {
 	s.logger = pct.NewLogger(s.logChan, "agent-test")
 
 	// Agent
-	s.config = &pc.Agent{
-		UUID:        "abc-123-def",
-		ApiHostname: "http://localhost",
-		Keepalive:   1, // don't send while testing
+	s.config = &AgentConfig{
+		Agent: &pc.Agent{
+			UUID:        "abc-123-def",
+			ApiHostname: "http://localhost",
+			Keepalive:   1, // don't send while testing
+		},
+		ManagedAPIPath: "managed",
 	}
 
 	s.sendChan = make(chan *proto.Cmd, 5)

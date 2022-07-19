@@ -356,7 +356,7 @@ func (a *RealAnalyzer) run() {
 
 			if interval.StartTime.After(lastTs) {
 				t0 := interval.StartTime.Format("2006-01-02 15:04:05")
-				if a.config.CollectFrom == "slowlog" {
+				if a.config.CollectFrom == "slowlog" || a.config.CollectFrom == "rds-slowlog" {
 					t1 := interval.StopTime.Format("15:04:05 MST")
 					a.status.Update(a.name+"-last-interval", fmt.Sprintf("%s to %s", t0, t1))
 				} else {

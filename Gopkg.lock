@@ -18,6 +18,21 @@
   version = "1.0.0"
 
 [[projects]]
+  digest = "1:4de7a4d4cb296e2143ab50efe283a19d701624e8ebd2cf774e603c9fb51b5fe1"
+  name = "github.com/aws/aws-sdk-go"
+  packages = [
+    "aws/awserr",
+    "aws/credentials",
+    "internal/context",
+    "internal/ini",
+    "internal/shareddefaults",
+    "internal/sync/singleflight",
+  ]
+  pruneopts = "NT"
+  revision = "dd182593819c7b76187973f0eda979a5fc266715"
+  version = "v1.44.52"
+
+[[projects]]
   branch = "master"
   digest = "1:e60ea12cc6af851334368f7df0e3e7f6827189a482324c9e3e9772f279a24df2"
   name = "github.com/bradfitz/slice"
@@ -300,6 +315,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Masterminds/semver",
+    "github.com/aws/aws-sdk-go/aws/credentials",
     "github.com/fatih/structs",
     "github.com/go-sql-driver/mysql",
     "github.com/gorilla/mux",
