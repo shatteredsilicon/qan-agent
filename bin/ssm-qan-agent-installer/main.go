@@ -33,6 +33,10 @@ import (
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
+const (
+	managedAPIPath = "managed"
+)
+
 var (
 	flagBasedir string
 	flagDebug   bool
@@ -45,8 +49,7 @@ var (
 	flagUseSSL         bool
 	flagUseInsecureSSL bool
 
-	flagHostname       string
-	flagManagedAPIPath string
+	flagHostname string
 )
 
 var fs *flag.FlagSet
@@ -64,7 +67,6 @@ func init() {
 	fs.StringVar(&flagServerPass, "server-pass", "", "Password to use for API auth")
 	fs.BoolVar(&flagUseSSL, "use-ssl", false, "Use ssl to connect to the API")
 	fs.BoolVar(&flagUseInsecureSSL, "use-insecure-ssl", false, "Use self signed certs when connecting to the API")
-	fs.StringVar(&flagManagedAPIPath, "managed-api-path", "managed", "ssm-managed api path")
 
 	hostname, _ := os.Hostname()
 	fs.StringVar(&flagHostname, "hostname", hostname, "OS instance hostname, defaults to local hostname")
@@ -108,7 +110,7 @@ func main() {
 			ServerSSL:         flagUseSSL,
 			ServerInsecureSSL: flagUseInsecureSSL,
 		},
-		ManagedAPIPath: flagManagedAPIPath,
+		ManagedAPIPath: managedAPIPath,
 	}
 
 	flags := installer.Flags{
