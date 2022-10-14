@@ -8,6 +8,7 @@ import (
 
 const (
 	statusParamGroupApplied = "in-sync"
+	sourceUser              = "user"
 
 	// FILEParamValue a parameter value indicates that it's file
 	FILEParamValue = "FILE"
@@ -24,6 +25,10 @@ var (
 	ErrNoParamGroupApplied = errors.New("no parameter group applied on this instance")
 	// ErrParamNotFound parameter not found error
 	ErrParamNotFound = errors.New("specified parameter not found")
+	// ErrClusterNotFound cluster not found error
+	ErrClusterNotFound = errors.New("cluster that specified instance associated to not found")
+	// ErrNoClusterParamGroupApplied no cluster paramter group applied error
+	ErrNoClusterParamGroupApplied = errors.New("no parameter group applied on this cluster")
 )
 
 // Service rds service
