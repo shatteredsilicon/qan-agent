@@ -49,6 +49,8 @@ var (
 	ErrUnknownRDSLogOutput = errors.New("value of rds parameter log_output is unknown")
 	// ErrRDSSlowlogDisabled slow log disabled error
 	ErrRDSSlowlogDisabled = errors.New("slow log of rds is disabled")
+	// ErrUnknownRDSSlowlogFile unknown rds slow log file value
+	ErrUnknownRDSSlowlogFile = errors.New("slow log file of rds is unknown")
 )
 
 type WorkerFactory interface {
@@ -231,7 +233,7 @@ func (w *Worker) Run() (*report.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if *enabled.ParameterValue != rds.TrueParamValue {
+	if enabled.ParameterValue == nil || *enabled.ParameterValue != rds.TrueParamValue {
 		return nil, ErrRDSSlowlogDisabled
 	}
 
@@ -239,11 +241,17 @@ func (w *Worker) Run() (*report.Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if slowLogFile.ParameterValue == nil {
+		return nil, ErrUnknownRDSSlowlogFile
+	}
 
 	// check if slow query log output to file or table
 	logOutput, err := w.rds.GetParam("log_output")
 	if err != nil {
 		return nil, err
+	}
+	if logOutput.ParameterValue == nil {
+		return nil, ErrUnknownRDSLogOutput
 	}
 
 	var result *report.Result
