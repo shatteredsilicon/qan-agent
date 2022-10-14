@@ -435,7 +435,7 @@ func NewWorker(logger *pct.Logger, mysqlConn mysql.Connector, getRows GetDigestR
 	return w
 }
 
-func (w *Worker) Setup(interval *iter.Interval) error {
+func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) error {
 	if w.iter != nil {
 		// Ensure intervals are in sequence, else reset.
 		if interval.Number != w.iter.Number+1 {

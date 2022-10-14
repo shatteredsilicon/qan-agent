@@ -416,9 +416,14 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 		a.logger.Debug(fmt.Sprintf("runWorker:return:%d", interval.Number))
 	}()
 
+	var resultChan chan *report.Result
+	if a.config.CollectFrom == "rds-slowlog" {
+		resultChan = make(chan *report.Result)
+	}
+
 	// Let worker do whatever it needs before it starts processing
 	// the interval. This mostly makes testing easier.
-	if err := a.worker.Setup(interval); err != nil {
+	if err := a.worker.Setup(interval, resultChan); err != nil {
 		a.logger.Warn(err)
 		return
 	}
@@ -431,29 +436,82 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 		}
 	}()
 
-	// Run the worker to process the interval.
 	t0 := time.Now()
-	result, err := a.worker.Run()
-	t1 := time.Now()
-	if err != nil {
-		a.logger.Error(err)
-		return
-	}
-	if result == nil {
-		if a.config.CollectFrom == "slowlog" {
-			// This shouldn't happen. If it does, the slow log worker has a bug
-			// because it should have returned an error above.
-			a.logger.Error("Nil result", interval)
-		}
-		return
-	}
-	result.RunTime = t1.Sub(t0).Seconds()
+	if a.config.CollectFrom == "rds-slowlog" {
+		go func() {
+			defer func() {
+				close(resultChan)
 
-	// Translate the results into a report and spool.
-	// NOTE: "qan" here is correct; do not use a.name.
-	report := report.MakeReport(a.config, interval.StartTime, interval.StopTime, interval, result)
-	if err := a.spool.Write("qan", report); err != nil {
-		a.logger.Warn("Lost report:", err)
+				if r := recover(); r != nil {
+					a.logger.Error("a.worker.Run panic: ", r)
+				}
+			}()
+
+			_, err := a.worker.Run()
+			if err != nil {
+				a.logger.Error("a.worker.Run error: ", err)
+			}
+		}()
+
+		makeReport := func(t0, t1 time.Time, result *report.Result) {
+			rep := report.MakeReport(a.config, t0, t1, interval, result)
+			if err := a.spool.Write("qan", rep); err != nil {
+				a.logger.Warn("Lost report:", err)
+			}
+		}
+
+		result := report.Result{}
+		for res := range resultChan {
+			if res == nil || len(res.Class) == 0 {
+				continue
+			}
+
+			result = report.MergeResult(result, *res)
+
+			t1 := time.Now()
+			if t1.Sub(t0).Seconds() < 1 {
+				continue
+			}
+
+			makeReport(t0, t1, &result)
+
+			result = report.Result{}
+			t0 = t1
+		}
+
+		if len(result.Class) > 0 {
+			t1 := time.Now()
+			if t1.Sub(t0).Seconds() < 1 {
+				t1 = t0.Add(time.Second)
+			}
+
+			makeReport(t0, t1, &result)
+		}
+	} else {
+		// Run the worker to process the interval.
+		result, err := a.worker.Run()
+		t1 := time.Now()
+		if err != nil {
+			a.logger.Error(err)
+			return
+		}
+
+		if result == nil {
+			if a.config.CollectFrom == "slowlog" {
+				// This shouldn't happen. If it does, the slow log worker has a bug
+				// because it should have returned an error above.
+				a.logger.Error("Nil result", interval)
+			}
+			return
+		}
+		result.RunTime = t1.Sub(t0).Seconds()
+
+		// Translate the results into a report and spool.
+		// NOTE: "qan" here is correct; do not use a.name.
+		report := report.MakeReport(a.config, interval.StartTime, interval.StopTime, interval, result)
+		if err := a.spool.Write("qan", report); err != nil {
+			a.logger.Warn("Lost report:", err)
+		}
 	}
 }
 

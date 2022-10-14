@@ -197,7 +197,7 @@ func test001(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err := w.Run()
@@ -212,7 +212,7 @@ func test001(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    2,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -245,7 +245,7 @@ func test002(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err := w.Run()
@@ -260,7 +260,7 @@ func test002(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    2,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -290,7 +290,7 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err := w.Run()
@@ -305,7 +305,7 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    2,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -323,7 +323,7 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    3,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -341,7 +341,7 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    4,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -369,7 +369,7 @@ func test004EmptyDigest(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMy
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err := w.Run()
@@ -397,7 +397,7 @@ func test005(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err := w.Run()
@@ -412,7 +412,7 @@ func test005(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    2,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -430,7 +430,7 @@ func test005(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    3,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i)
+	err = w.Setup(i, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -490,7 +490,7 @@ func testRealWorker(t *testing.T, logger *pct.Logger, dsn string) {
 	_, err = mysqlConn.DB().Exec("SELECT 'teapot' FROM DUAL")
 
 	// First interval.
-	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()})
+	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
 	res, err := w.Run()
@@ -505,7 +505,7 @@ func testRealWorker(t *testing.T, logger *pct.Logger, dsn string) {
 	time.Sleep(1 * time.Second)
 
 	// Second interval and a result.
-	err = w.Setup(&iter.Interval{Number: 2, StartTime: time.Now().UTC()})
+	err = w.Setup(&iter.Interval{Number: 2, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -592,7 +592,7 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 	_, err = mysqlConn.DB().Exec("SELECT 'teapot' FROM DUAL")
 
 	// First interval.
-	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()})
+	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
 	res, err := w.Run()
@@ -609,7 +609,7 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 	// Simulate the ticker being reset which results in it resetting
 	// its internal interval number, so instead of 2 here we have 1 again.
 	// Second interval and a result.
-	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()})
+	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -620,7 +620,7 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 	require.NoError(t, err)
 
 	// Simulate normal operation resuming, i.e. interval 2.
-	err = w.Setup(&iter.Interval{Number: 2, StartTime: time.Now().UTC()})
+	err = w.Setup(&iter.Interval{Number: 2, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
 	// Now there should be a result.
@@ -679,7 +679,7 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 
 	// First interval.
 	now := time.Now().UTC()
-	err = w.Setup(&iter.Interval{Number: 1, StartTime: now})
+	err = w.Setup(&iter.Interval{Number: 1, StartTime: now}, nil)
 	require.NoError(t, err)
 
 	res, err := w.Run()
@@ -692,7 +692,7 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 	// Simulate the ticker sending a time that's earlier than the previous
 	// tick, which shouldn't happen.
 	now = now.Add(-1 * time.Minute)
-	err = w.Setup(&iter.Interval{Number: 2, StartTime: now})
+	err = w.Setup(&iter.Interval{Number: 2, StartTime: now}, nil)
 	require.NoError(t, err)
 
 	res, err = w.Run()
@@ -704,7 +704,7 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 
 	// Simulate normal operation resuming.
 	now = now.Add(1 * time.Minute)
-	err = w.Setup(&iter.Interval{Number: 3, StartTime: now})
+	err = w.Setup(&iter.Interval{Number: 3, StartTime: now}, nil)
 	require.NoError(t, err)
 
 	// Now there should be a result.

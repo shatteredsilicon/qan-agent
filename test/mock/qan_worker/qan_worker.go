@@ -50,7 +50,7 @@ func NewQanWorker() *QanWorker {
 	return w
 }
 
-func (w *QanWorker) Setup(interval *iter.Interval) error {
+func (w *QanWorker) Setup(interval *iter.Interval, resultChan chan *report.Result) error {
 	w.Interval = interval
 	w.SetupChan <- true
 	return w.crashOrError()

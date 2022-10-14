@@ -108,7 +108,7 @@ func (s *WorkerTestSuite) SetUpTest(t *C) {
 func (s *WorkerTestSuite) RunWorker(config pc.QAN, mysqlConn mysql.Connector, i *iter.Interval) (*report.Result, error) {
 	w := NewWorker(s.logger, config, mysqlConn)
 	w.ZeroRunTime = true
-	w.Setup(i)
+	w.Setup(i, nil)
 	err, res := w.Run()
 	w.Cleanup()
 	return err, res
@@ -317,7 +317,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 		StopTime:    now,
 	}
 	// Rotation happens in Setup(), but the log isn't rotated yet.
-	w.Setup(i1)
+	w.Setup(i1, nil)
 	gotSet := s.nullmysql.GetExec()
 	t.Check(gotSet, HasLen, 0)
 
@@ -336,7 +336,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 		StartTime:   now,
 		StopTime:    now,
 	}
-	w.Setup(i2)
+	w.Setup(i2, nil)
 	gotSet = s.nullmysql.GetExec()
 	expectSet := append(config.Stop, config.Start...)
 	expectSet = append(expectSet, "FLUSH NO_WRITE_TO_BINLOG SLOW LOGS")
@@ -419,7 +419,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 		StopTime:    now,
 	}
 	// Rotation happens in Setup(), but the log isn't rotated yet.
-	w.Setup(i1)
+	w.Setup(i1, nil)
 	gotSet := s.nullmysql.GetExec()
 	t.Check(gotSet, HasLen, 0)
 
@@ -438,7 +438,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 		StartTime:   now,
 		StopTime:    now,
 	}
-	w.Setup(i2)
+	w.Setup(i2, nil)
 	gotSet = s.nullmysql.GetExec()
 	expectSet := append(config.Stop, config.Start...)
 	expectSet = append(expectSet, "FLUSH NO_WRITE_TO_BINLOG SLOW LOGS")
@@ -571,7 +571,7 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 		StopTime:    now,
 	}
 	// Rotation happens in Setup(), but the log isn't rotated yet.
-	w.Setup(i1)
+	w.Setup(i1, nil)
 
 	res, err := w.Run()
 	t.Assert(err, IsNil)
@@ -588,7 +588,7 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 		StartTime:   now,
 		StopTime:    now,
 	}
-	w.Setup(i2)
+	w.Setup(i2, nil)
 
 	// When rotated, the interval end offset is extended to end of file.
 	t.Check(i2.EndOffset, Equals, int64(2200))
@@ -645,7 +645,7 @@ func (s *WorkerTestSuite) TestStop(t *C) {
 		StartOffset: 0,
 		EndOffset:   100000,
 	}
-	w.Setup(i)
+	w.Setup(i, nil)
 
 	// Run the worker. It calls p.Start() and p.Stop() when done.
 	doneChan := make(chan bool, 1)
@@ -721,7 +721,7 @@ func (s *WorkerTestSuite) TestResult014(t *C) {
 		StartOffset: 0,
 		EndOffset:   127118681,
 	}
-	w.Setup(i)
+	w.Setup(i, nil)
 	result, err := w.Run()
 	t.Assert(err, IsNil)
 	w.Cleanup()

@@ -136,7 +136,7 @@ func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector) *Wo
 	return w
 }
 
-func (w *Worker) Setup(interval *iter.Interval) error {
+func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) error {
 	w.logger.Debug("Setup:call")
 	defer w.logger.Debug("Setup:return")
 	w.logger.Debug("Setup:", interval)
