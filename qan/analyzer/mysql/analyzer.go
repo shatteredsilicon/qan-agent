@@ -417,7 +417,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 	}()
 
 	var resultChan chan *report.Result
-	if a.config.CollectFrom == "rds-slowlog" {
+	if a.config.CollectFrom == "rds-slowlog" || a.config.CollectFrom == "slowlog" {
 		resultChan = make(chan *report.Result)
 	}
 
@@ -437,7 +437,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 	}()
 
 	t0 := time.Now()
-	if a.config.CollectFrom == "rds-slowlog" {
+	if a.config.CollectFrom == "rds-slowlog" || a.config.CollectFrom == "slowlog" {
 		go func() {
 			defer func() {
 				close(resultChan)
@@ -497,11 +497,6 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 		}
 
 		if result == nil {
-			if a.config.CollectFrom == "slowlog" {
-				// This shouldn't happen. If it does, the slow log worker has a bug
-				// because it should have returned an error above.
-				a.logger.Error("Nil result", interval)
-			}
 			return
 		}
 		result.RunTime = t1.Sub(t0).Seconds()
