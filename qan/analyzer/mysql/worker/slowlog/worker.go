@@ -26,15 +26,19 @@ import (
 
 	"github.com/percona/go-mysql/event"
 	"github.com/percona/go-mysql/log"
-	parser "github.com/percona/go-mysql/log/slow"
 	"github.com/percona/go-mysql/query"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
+)
+
+const (
+	defaultResultSize = 1000
 )
 
 type WorkerFactory interface {
@@ -92,6 +96,7 @@ type Worker struct {
 	logParser       log.LogParser
 	utcOffset       time.Duration
 	outlierTime     float64
+	resultChan      chan *report.Result
 }
 
 func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector) *Worker {
@@ -136,7 +141,7 @@ func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector) *Wo
 	return w
 }
 
-func (w *Worker) Setup(interval *iter.Interval) error {
+func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) error {
 	w.logger.Debug("Setup:call")
 	defer w.logger.Debug("Setup:return")
 	w.logger.Debug("Setup:", interval)
@@ -168,6 +173,7 @@ func (w *Worker) Setup(interval *iter.Interval) error {
 	}
 	w.logger.Debug("Setup:", w.job)
 
+	w.resultChan = resultChan
 	return nil
 }
 
@@ -193,6 +199,10 @@ func (w *Worker) Run() (*report.Result, error) {
 		return nil, err
 	}
 	defer file.Close()
+
+	if w.job.StartOffset == 0 {
+		w.job.StartOffset = w.job.EndOffset
+	}
 
 	// Create a slow log parser and run it.  It sends log.Event via its channel.
 	// Be sure to stop it when done, else we'll leak goroutines.
@@ -231,6 +241,23 @@ func (w *Worker) Run() (*report.Result, error) {
 	rateType := ""
 	rateLimit := uint(0)
 
+	sendResult := func(a *event.Aggregator, res *report.Result) {
+		r := a.Finalize()
+
+		// The aggregator result is a map, but we need an array of classes for
+		// the query report, so convert it.
+		n := len(r.Class)
+		classes := make([]*event.Class, n)
+		for _, class := range r.Class {
+			n-- // can't classes[--n] in Go
+			classes[n] = class
+		}
+		res.Global = r.Global
+		res.Class = classes
+		res.RateLimit = rateLimit
+		w.resultChan <- res
+	}
+
 	// Do fingerprinting in a separate Go routine so we can recover in case
 	// query.Fingerprint() crashes. We don't want one bad fingerprint to stop
 	// parsing the entire interval. Also, we want to log crashes and hopefully
@@ -239,12 +266,23 @@ func (w *Worker) Run() (*report.Result, error) {
 	defer func() { w.doneChan <- true }()
 
 	t0 := time.Now().UTC()
+	resultSize := 0
 EVENT_LOOP:
-	for event := range p.EventChan() {
+	for e := range p.EventChan() {
 		runtime = time.Now().UTC().Sub(t0)
 		progress = fmt.Sprintf("%.1f%% %d/%d %d %.1fs",
-			float64(event.Offset)/float64(w.job.EndOffset)*100, event.Offset, w.job.EndOffset, jobSize, runtime.Seconds())
+			float64(e.Offset)/float64(w.job.EndOffset)*100, e.Offset, w.job.EndOffset, jobSize, runtime.Seconds())
 		w.status.Update(w.name, fmt.Sprintf("Parsing %s: %s", w.job.SlowLogFile, progress))
+
+		if resultSize >= defaultResultSize {
+			sendResult(aggregator, result)
+			aggregator = event.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
+			result = &report.Result{
+				RateLimit:  rateLimit,
+				StopOffset: result.StopOffset,
+			}
+			resultSize = 0
+		}
 
 		// Stop if Stop() called.
 		select {
@@ -253,6 +291,11 @@ EVENT_LOOP:
 			stopped = true
 			break EVENT_LOOP
 		default:
+		}
+
+		// ignore empty query
+		if len(e.Query) == 0 || e.Query == ";" {
+			continue
 		}
 
 		// Stop if runtime exceeded.
@@ -268,39 +311,40 @@ EVENT_LOOP:
 		// so typical case is, for example, parsing from offset 100 to 5000
 		// but slow log is already 7000 bytes large and growing. So the first
 		// event with offset > 5000 marks the end (StopOffset) of this slice.
-		if int64(event.Offset) >= w.job.EndOffset {
-			result.StopOffset = int64(event.Offset)
+		if int64(e.Offset) >= w.job.EndOffset {
+			result.StopOffset = int64(e.Offset)
 			break EVENT_LOOP
 		}
 
 		// Stop if rate limits are mixed. This shouldn't happen. If it does,
 		// another program or person might have reconfigured the rate limit.
 		// We don't handle by design this because it's too much of an edge case.
-		if event.RateType != "" {
+		if e.RateType != "" {
 			if rateType != "" {
-				if rateType != event.RateType || rateLimit != event.RateLimit {
+				if rateType != e.RateType || rateLimit != e.RateLimit {
 					errMsg := fmt.Sprintf("Slow log has mixed rate limits: %s/%d and %s/%d",
-						rateType, rateLimit, event.RateType, event.RateLimit)
+						rateType, rateLimit, e.RateType, e.RateLimit)
 					w.logger.Warn(errMsg)
 					result.Error = errMsg
 					break EVENT_LOOP
 				}
 			} else {
-				rateType = event.RateType
-				rateLimit = event.RateLimit
+				rateType = e.RateType
+				rateLimit = e.RateLimit
 			}
 		}
 
 		// Fingerprint the query and add it to the event aggregator. If the
 		// fingerprinter crashes, start it again and skip this event.
 		var fingerprint string
-		w.queryChan <- event.Query
+		w.queryChan <- e.Query
+		resultSize++
 		select {
 		case fingerprint = <-w.fingerprintChan:
 			id := query.Id(fingerprint)
-			aggregator.AddEvent(event, id, fingerprint)
+			aggregator.AddEvent(e, id, fingerprint)
 		case _ = <-w.errChan:
-			w.logger.Warn(fmt.Sprintf("Cannot fingerprint '%s'", event.Query))
+			w.logger.Warn(fmt.Sprintf("Cannot fingerprint '%s'", e.Query))
 			go w.fingerprinter()
 		}
 	}
@@ -316,19 +360,7 @@ EVENT_LOOP:
 
 	// Finalize the global and class metrics, i.e. calculate metric stats.
 	w.status.Update(w.name, "Finalizing job "+w.job.Id)
-	r := aggregator.Finalize()
-
-	// The aggregator result is a map, but we need an array of classes for
-	// the query report, so convert it.
-	n := len(r.Class)
-	classes := make([]*event.Class, n)
-	for _, class := range r.Class {
-		n-- // can't classes[--n] in Go
-		classes[n] = class
-	}
-	result.Global = r.Global
-	result.Class = classes
-	result.RateLimit = rateLimit
+	sendResult(aggregator, result)
 
 	// Zero the runtime for testing.
 	if !w.ZeroRunTime {
@@ -336,7 +368,7 @@ EVENT_LOOP:
 	}
 
 	w.logger.Info(fmt.Sprintf("Parsed %s: %s", w.job, progress))
-	return result, nil
+	return nil, nil
 }
 
 func (w *Worker) Stop() error {
@@ -375,7 +407,7 @@ func (w *Worker) MakeLogParser(file *os.File, opts log.Options) log.LogParser {
 		w.logParser = nil
 		return p
 	}
-	return parser.NewSlowLogParser(file, opts)
+	return util.NewSlowLogParser(file, opts)
 }
 
 // --------------------------------------------------------------------------

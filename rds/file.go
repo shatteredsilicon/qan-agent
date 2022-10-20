@@ -1,33 +1,54 @@
 package rds
 
 import (
-	"bytes"
-
 	"github.com/aws/aws-sdk-go/service/rds"
 )
 
 const (
-	zeroMarker = "0"
+	// ZeroMarker zero value of rds api marker
+	ZeroMarker = "0"
+	// DefaultNumberOfLines default NumberOfLines value of rds api
+	DefaultNumberOfLines = int64(10000)
 )
 
-// GetLogFiles returns log file details of aws rds
-func (svc *Service) GetLogFiles(lastWritten *int64) ([]*rds.DescribeDBLogFilesDetails, error) {
+// ByFileName implements sort.Interface for []*rds.DescribeDBLogFilesDetails
+// based on the LogFileName field.
+type ByFileName []*rds.DescribeDBLogFilesDetails
+
+func (f ByFileName) Len() int      { return len(f) }
+func (f ByFileName) Swap(i, j int) { f[i], f[j] = f[j], f[i] }
+func (f ByFileName) Less(i, j int) bool {
+	if f[j] == nil || f[j].LogFileName == nil {
+		return false
+	}
+
+	if f[i] != nil && f[i].LogFileName != nil && *f[i].LogFileName < *f[j].LogFileName {
+		return true
+	}
+
+	return false
+}
+
+// GetSlowQueryLogFiles returns log file details of aws rds
+func (svc *Service) GetSlowQueryLogFiles(lastWritten *int64, prefix *string) ([]*rds.DescribeDBLogFilesDetails, error) {
 	files := make([]*rds.DescribeDBLogFilesDetails, 0)
 
 	result, err := svc.DescribeDBLogFiles(&rds.DescribeDBLogFilesInput{
 		DBInstanceIdentifier: &svc.instance,
 		FileLastWritten:      lastWritten,
+		FilenameContains:     prefix,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	files = append(files, result.DescribeDBLogFiles...)
-	for result.Marker != nil && *result.Marker != zeroMarker {
+	for result.Marker != nil && *result.Marker != ZeroMarker {
 		result, err = svc.DescribeDBLogFiles(&rds.DescribeDBLogFilesInput{
 			DBInstanceIdentifier: &svc.instance,
 			FileLastWritten:      lastWritten,
 			Marker:               result.Marker,
+			FilenameContains:     prefix,
 		})
 		if err != nil {
 			return nil, err
@@ -38,29 +59,12 @@ func (svc *Service) GetLogFiles(lastWritten *int64) ([]*rds.DescribeDBLogFilesDe
 	return files, nil
 }
 
-// DownloadLogFile downloads full data of a rds log file and returns it
-func (svc *Service) DownloadLogFile(filename string) ([]byte, error) {
-	result, err := svc.DownloadDBLogFilePortion(&rds.DownloadDBLogFilePortionInput{
+// DownloadDBLogFilePortion calls rds api DownloadDBLogFilePortion
+func (svc *Service) DownloadDBLogFilePortion(logFileName, marker *string, lines *int64) (*rds.DownloadDBLogFilePortionOutput, error) {
+	return svc.RDS.DownloadDBLogFilePortion(&rds.DownloadDBLogFilePortionInput{
 		DBInstanceIdentifier: &svc.instance,
-		LogFileName:          &filename,
+		LogFileName:          logFileName,
+		Marker:               marker,
+		NumberOfLines:        lines,
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	var data bytes.Buffer
-	data.WriteString(*result.LogFileData)
-	for result.AdditionalDataPending != nil && *result.AdditionalDataPending {
-		result, err = svc.DownloadDBLogFilePortion(&rds.DownloadDBLogFilePortionInput{
-			DBInstanceIdentifier: &svc.instance,
-			LogFileName:          &filename,
-			Marker:               result.Marker,
-		})
-		if err != nil {
-			return nil, err
-		}
-		data.WriteString(*result.LogFileData)
-	}
-
-	return data.Bytes(), nil
 }

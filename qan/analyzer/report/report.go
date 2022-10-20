@@ -19,6 +19,7 @@ package report
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/percona/go-mysql/event"
@@ -97,4 +98,45 @@ func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Inte
 	report.Class = append(report.Class, lrq)
 
 	return report // top classes, the rest as LRQ
+}
+
+// MergeResult merges srcResult into destResult
+func MergeResult(destResult, srcResult Result) Result {
+	if destResult.Global == nil {
+		destResult.Global = srcResult.Global
+	} else if srcResult.Global != nil {
+		destResult.Global.AddClass(srcResult.Global)
+	}
+
+	if destResult.Class == nil || len(destResult.Class) == 0 {
+		destResult.Class = srcResult.Class
+	} else {
+		classes := make(map[string]*event.Class)
+		for _, class := range destResult.Class {
+			classes[class.Id] = class
+		}
+
+		for _, class := range srcResult.Class {
+			if _, ok := classes[class.Id]; ok {
+				classes[class.Id].AddClass(class)
+			} else {
+				classes[class.Id] = class
+				destResult.Class = append(destResult.Class, class)
+			}
+		}
+	}
+
+	destResult.RunTime += srcResult.RunTime
+	if srcResult.StopOffset > destResult.StopOffset {
+		destResult.StopOffset = srcResult.StopOffset
+	}
+	if len(srcResult.Error) > 0 {
+		if len(destResult.Error) > 0 {
+			destResult.Error = strings.Join([]string{destResult.Error, srcResult.Error}, " | ")
+		} else {
+			destResult.Error = srcResult.Error
+		}
+	}
+
+	return destResult
 }
