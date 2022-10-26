@@ -190,12 +190,15 @@ func (w *Worker) setupRDS() error {
 		return err
 	}
 
-	creds := credentials.NewCredentials(&credentials.StaticProvider{
-		Value: credentials.Value{
-			AccessKeyID:     rdsSvcDetail.AWSAccessKeyID,
-			SecretAccessKey: rdsSvcDetail.AWSSecretAccessKey,
-		},
-	})
+	var creds *credentials.Credentials
+	if rdsSvcDetail.AWSAccessKeyID != "" || rdsSvcDetail.AWSSecretAccessKey != "" {
+		creds = credentials.NewCredentials(&credentials.StaticProvider{
+			Value: credentials.Value{
+				AccessKeyID:     rdsSvcDetail.AWSAccessKeyID,
+				SecretAccessKey: rdsSvcDetail.AWSSecretAccessKey,
+			},
+		})
+	}
 	awsConfig := &aws.Config{
 		CredentialsChainVerboseErrors: aws.Bool(true),
 		Credentials:                   creds,
