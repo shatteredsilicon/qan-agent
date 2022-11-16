@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
@@ -111,6 +112,11 @@ func (m *MySQLAnalyzer) Start() error {
 		return fmt.Errorf("invalid QAN config: %s", err)
 	}
 
+	agentConfig := &agent.AgentConfig{}
+	if _, err := pct.Basedir.ReadConfig("agent", agentConfig); err != nil {
+		return fmt.Errorf("can't parse agent config: %#v", err)
+	}
+
 	// Add the MySQL DSN to the MySQL restart monitor. If MySQL restarts,
 	// the analyzer will stop its worker and re-configure MySQL.
 	restartChan := m.mrms.Add(m.protoInstance)
@@ -126,11 +132,11 @@ func (m *MySQLAnalyzer) Start() error {
 	analyzerType := config.CollectFrom
 	switch analyzerType {
 	case "slowlog":
-		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
+		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn, agentConfig.FilterOmit)
 	case "perfschema":
-		worker = m.perfschemaWorkerFactory.Make(name+"-worker", mysqlConn)
+		worker = m.perfschemaWorkerFactory.Make(name+"-worker", mysqlConn, agentConfig.FilterOmit)
 	case "rds-slowlog":
-		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
+		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, mysqlConn, agentConfig.FilterOmit)
 	default:
 		panic("Invalid analyzerType: " + analyzerType)
 	}

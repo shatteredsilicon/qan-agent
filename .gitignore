@@ -10,3 +10,4 @@ distro/
 build/ssm-qan-agent*
 bin/ssm-qan-agent/ssm-qan-agent
 bin/ssm-qan-agent-installer/ssm-qan-agent-installer
+vendor/

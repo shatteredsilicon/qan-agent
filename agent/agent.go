@@ -79,6 +79,7 @@ type Agent struct {
 type AgentConfig struct {
 	*pc.Agent
 	ManagedAPIPath string
+	FilterOmit     []string
 }
 
 type CollectInfoData struct {

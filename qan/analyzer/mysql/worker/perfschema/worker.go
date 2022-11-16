@@ -148,7 +148,7 @@ type Class struct {
 type Snapshot map[string]Class // keyed on digest (classId)
 
 type WorkerFactory interface {
-	Make(name string, mysqlConn mysql.Connector) *Worker
+	Make(name string, mysqlConn mysql.Connector, filterOmit []string) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -168,9 +168,9 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector) *Worker {
+func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, filterOmit []string) *Worker {
 	getRows := func(c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error {
-		return GetDigestRows(mysqlConn, lastFetchSeconds, c, doneChan)
+		return GetDigestRows(mysqlConn, lastFetchSeconds, c, doneChan, filterOmit)
 	}
 
 	return NewWorker(pct.NewLogger(f.logChan, name), mysqlConn, getRows)
@@ -180,7 +180,7 @@ func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector) *Worker
 // fetches snapshot of data from events_statements_summary_by_digest,
 // delivers it over a channel, and notifies success or error through `doneChan`.
 // If `lastFetchSeconds` equals `-1` then it fetches all data, not just since `lastFetchSeconds`.
-func GetDigestRows(mysqlConn mysql.Connector, lastFetchSeconds float64, c chan<- *DigestRow, doneChan chan<- error) error {
+func GetDigestRows(mysqlConn mysql.Connector, lastFetchSeconds float64, c chan<- *DigestRow, doneChan chan<- error, filterOmit []string) error {
 	q := `
 SELECT
 	COALESCE(SCHEMA_NAME, ''),
@@ -272,6 +272,17 @@ SELECT
 			// https://dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-11.html
 			row.DigestText = strings.TrimSpace(row.DigestText)
 
+			var omit bool
+			for _, omitQuery := range filterOmit {
+				if strings.ToLower(omitQuery) == strings.ToLower(row.DigestText) {
+					omit = true
+					break
+				}
+			}
+			if omit {
+				continue
+			}
+
 			c <- row
 		}
 		if err = rows.Err(); err != nil {
@@ -279,7 +290,7 @@ SELECT
 		}
 
 		preStmtDoneChan := make(chan error, 1)
-		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan); err != nil {
+		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan, filterOmit); err != nil {
 			return
 		}
 
@@ -296,7 +307,7 @@ SELECT
 // GetPreStmtRows connects to MySQL through `mysql.Connector`,
 // fetches rows from prepared_stmtements_instances and converts rows into DigestRow structure,
 // delivers it over a channel, and notifies success or error through `doneChan`.
-func GetPreStmtRows(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error) error {
+func GetPreStmtRows(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error, filterOmit []string) error {
 	q := `
 SELECT
 	STATEMENT_ID,
@@ -381,6 +392,17 @@ SELECT
 			)
 			if err != nil {
 				return // This bubbles up too (see above).
+			}
+
+			var omit bool
+			for _, omitQuery := range filterOmit {
+				if strings.ToLower(omitQuery) == strings.ToLower(row.SQLText) {
+					omit = true
+					break
+				}
+			}
+			if omit {
+				continue
 			}
 
 			c <- row.ConvertToDigestRow()
