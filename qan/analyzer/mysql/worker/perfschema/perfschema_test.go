@@ -463,7 +463,7 @@ func testRealWorker(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn)
+	w := f.Make("qan-worker", mysqlWorkerConn, nil)
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},
@@ -565,7 +565,7 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn)
+	w := f.Make("qan-worker", mysqlWorkerConn, nil)
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},
@@ -653,7 +653,7 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn)
+	w := f.Make("qan-worker", mysqlWorkerConn, nil)
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},

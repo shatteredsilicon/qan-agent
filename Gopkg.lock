@@ -21,12 +21,47 @@
   digest = "1:4de7a4d4cb296e2143ab50efe283a19d701624e8ebd2cf774e603c9fb51b5fe1"
   name = "github.com/aws/aws-sdk-go"
   packages = [
+    "aws",
     "aws/awserr",
+    "aws/awsutil",
+    "aws/client",
+    "aws/client/metadata",
+    "aws/corehandlers",
     "aws/credentials",
+    "aws/credentials/ec2rolecreds",
+    "aws/credentials/endpointcreds",
+    "aws/credentials/processcreds",
+    "aws/credentials/ssocreds",
+    "aws/credentials/stscreds",
+    "aws/csm",
+    "aws/defaults",
+    "aws/ec2metadata",
+    "aws/endpoints",
+    "aws/request",
+    "aws/session",
+    "aws/signer/v4",
     "internal/context",
     "internal/ini",
+    "internal/sdkio",
+    "internal/sdkmath",
+    "internal/sdkrand",
+    "internal/sdkuri",
     "internal/shareddefaults",
+    "internal/strings",
     "internal/sync/singleflight",
+    "private/protocol",
+    "private/protocol/json/jsonutil",
+    "private/protocol/jsonrpc",
+    "private/protocol/query",
+    "private/protocol/query/queryutil",
+    "private/protocol/rest",
+    "private/protocol/restjson",
+    "private/protocol/xml/xmlutil",
+    "service/rds",
+    "service/sso",
+    "service/sso/ssoiface",
+    "service/sts",
+    "service/sts/stsiface",
   ]
   pruneopts = "NT"
   revision = "dd182593819c7b76187973f0eda979a5fc266715"
@@ -108,6 +143,13 @@
   revision = "23480c0665776210b5fbbac6eaaee40e3e6a96b7"
 
 [[projects]]
+  digest = "1:1234e31f3de67447e344dabcdf72c4588d31b8eed2d28f1889377ec006a086a9"
+  name = "github.com/jmespath/go-jmespath"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "c2b33e84"
+
+[[projects]]
   digest = "1:9c23da128da221c8c5626550739f7a3406f78ddb6d4f148382025acaadb9bcab"
   name = "github.com/montanaflynn/stats"
   packages = ["."]
@@ -133,6 +175,7 @@
     "log",
     "log/slow",
     "query",
+    "test",
   ]
   pruneopts = "NT"
   revision = "3e7f9d34c354bcac341d858ebbc4679d1bfbd9c4"
@@ -245,7 +288,10 @@
   branch = "master"
   digest = "1:2c0f7d9b5469c60bc9120f2d75dba01450d273b10c7928437465f41614d98951"
   name = "go4.org"
-  packages = ["reflectutil"]
+  packages = [
+    "reflectutil",
+    "sort",
+  ]
   pruneopts = "NT"
   revision = "9599cf28b011184741f249bd9f9330756b506cbc"
 
@@ -315,7 +361,11 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Masterminds/semver",
+    "github.com/aws/aws-sdk-go/aws",
+    "github.com/aws/aws-sdk-go/aws/awserr",
     "github.com/aws/aws-sdk-go/aws/credentials",
+    "github.com/aws/aws-sdk-go/aws/session",
+    "github.com/aws/aws-sdk-go/service/rds",
     "github.com/fatih/structs",
     "github.com/go-sql-driver/mysql",
     "github.com/gorilla/mux",
@@ -326,6 +376,7 @@
     "github.com/percona/go-mysql/log",
     "github.com/percona/go-mysql/log/slow",
     "github.com/percona/go-mysql/query",
+    "github.com/percona/go-mysql/test",
     "github.com/percona/percona-toolkit/src/go/mongolib/explain",
     "github.com/percona/percona-toolkit/src/go/mongolib/fingerprinter",
     "github.com/percona/percona-toolkit/src/go/mongolib/proto",
@@ -339,6 +390,7 @@
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
     "github.com/stretchr/testify/suite",
+    "go4.org/sort",
     "golang.org/x/net/websocket",
     "gopkg.in/check.v1",
     "gopkg.in/mgo.v2",

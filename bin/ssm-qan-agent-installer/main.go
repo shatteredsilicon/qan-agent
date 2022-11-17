@@ -47,6 +47,8 @@ var (
 
 	flagHostname       string
 	flagManagedAPIPath string
+
+	flagFilterOmit string
 )
 
 var fs *flag.FlagSet
@@ -68,6 +70,8 @@ func init() {
 
 	hostname, _ := os.Hostname()
 	fs.StringVar(&flagHostname, "hostname", hostname, "OS instance hostname, defaults to local hostname")
+
+	fs.StringVar(&flagFilterOmit, "filter-omit", "", "Queries that should be omitted, split by comma")
 }
 
 func main() {
@@ -81,6 +85,11 @@ func main() {
 			return
 		}
 		log.Fatal(err)
+	}
+
+	filterOmit := strings.Split(flagFilterOmit, ",")
+	if len(filterOmit) == 0 && os.Getenv("QAN_FILTER_OMIT") != "" {
+		filterOmit = strings.Split(os.Getenv("QAN_FILTER_OMIT"), ",")
 	}
 
 	args := fs.Args()
@@ -109,6 +118,7 @@ func main() {
 			ServerInsecureSSL: flagUseInsecureSSL,
 		},
 		ManagedAPIPath: flagManagedAPIPath,
+		FilterOmit:     filterOmit,
 	}
 
 	flags := installer.Flags{
