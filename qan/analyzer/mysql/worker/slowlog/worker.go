@@ -43,7 +43,7 @@ const (
 )
 
 type WorkerFactory interface {
-	Make(name string, config pc.QAN, mysqlConn mysql.Connector, filterOmit []string) *Worker
+	Make(name string, config pc.QAN, mysqlConn mysql.Connector) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -57,8 +57,8 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, config pc.QAN, mysqlConn mysql.Connector, filterOmit []string) *Worker {
-	return NewWorker(pct.NewLogger(f.logChan, name), config, mysqlConn, filterOmit)
+func (f *RealWorkerFactory) Make(name string, config pc.QAN, mysqlConn mysql.Connector) *Worker {
+	return NewWorker(pct.NewLogger(f.logChan, name), config, mysqlConn)
 }
 
 // --------------------------------------------------------------------------
@@ -98,10 +98,9 @@ type Worker struct {
 	utcOffset       time.Duration
 	outlierTime     float64
 	resultChan      chan *report.Result
-	filterOmit      []string
 }
 
-func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector, filterOmit []string) *Worker {
+func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector) *Worker {
 	// By default replace numbers in words with ?
 	query.ReplaceNumbersInWords = true
 
@@ -139,7 +138,6 @@ func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector, fil
 		sync:            pct.NewSyncChan(),
 		utcOffset:       utcOffset,
 		outlierTime:     outlierTime.Float64,
-		filterOmit:      filterOmit,
 	}
 	return w
 }
@@ -346,8 +344,8 @@ EVENT_LOOP:
 		case fingerprint = <-w.fingerprintChan:
 			// check if query should be omitted first
 			var omit bool
-			for _, omitQuery := range w.filterOmit {
-				if strings.ToLower(fingerprint) == strings.ToLower(omitQuery) {
+			for _, omitQuery := range w.config.FilterOmit {
+				if strings.TrimSpace(strings.ToLower(fingerprint)) == strings.TrimSpace(strings.ToLower(omitQuery)) {
 					omit = true
 					break
 				}

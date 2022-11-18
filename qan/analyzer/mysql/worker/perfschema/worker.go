@@ -274,7 +274,7 @@ SELECT
 
 			var omit bool
 			for _, omitQuery := range filterOmit {
-				if strings.ToLower(omitQuery) == strings.ToLower(row.DigestText) {
+				if strings.TrimSpace(strings.ToLower(row.DigestText)) == strings.TrimSpace(strings.ToLower(omitQuery)) {
 					omit = true
 					break
 				}
@@ -396,7 +396,7 @@ SELECT
 
 			var omit bool
 			for _, omitQuery := range filterOmit {
-				if strings.ToLower(omitQuery) == strings.ToLower(row.SQLText) {
+				if strings.TrimSpace(strings.ToLower(row.SQLText)) == strings.TrimSpace(strings.ToLower(omitQuery)) {
 					omit = true
 					break
 				}
