@@ -338,7 +338,7 @@ func (s *AnalyzerTestSuite) TestRealSlowLogWorker(t *C) {
 		"SET GLOBAL long_query_time=10",
 	}
 
-	worker := slowlog.NewWorker(pct.NewLogger(s.logChan, "qan-worker"), config, realmysql, nil)
+	worker := slowlog.NewWorker(pct.NewLogger(s.logChan, "qan-worker"), config, realmysql)
 	//intervalChan := make(chan *iter.Interval, 1)
 	//iter := mock.NewIter(intervalChan)
 

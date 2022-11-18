@@ -203,18 +203,6 @@
   version = "0.5.2"
 
 [[projects]]
-  branch = "1.x"
-  digest = "1:0cb71a7e3480d84702de479e2e729e008fb47cfae4845acb6c28adc06a004c3b"
-  name = "github.com/percona/pmm"
-  packages = [
-    "proto",
-    "proto/metrics",
-    "proto/query",
-  ]
-  pruneopts = "NT"
-  revision = "0786b7d8dc86416a573234f1e7a7abc24885676a"
-
-[[projects]]
   branch = "master"
   digest = "1:bf2ac97824a7221eb16b096aecc1c390d4c8a4e49524386aaa2e2dd215cbfb31"
   name = "github.com/petar/GoLLRB"
@@ -248,15 +236,17 @@
 
 [[projects]]
   branch = "1.x"
-  digest = "1:e0031c211f0d329746025865f12155d684a1c8b2a3ba5ef3925dc98ef4147822"
+  digest = "1:a3aeb1a97b226671ae38b5790e4c73dd1ff6cd3ad4d8ddf056f22d5843f88f7f"
   name = "github.com/shatteredsilicon/ssm"
   packages = [
     "proto",
     "proto/config",
+    "proto/metrics",
     "proto/qan",
+    "proto/query",
   ]
   pruneopts = "NT"
-  revision = "14e9a156f922df9c0b8e058b9fcede6c8d1f257b"
+  revision = "b00aab5447e7f481eec150bc4fd6ba1137260b4f"
 
 [[projects]]
   digest = "1:37ec88f4c87efa6980266ca363d025927f7d58e10ed66fe98945b13347db495f"

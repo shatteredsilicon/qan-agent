@@ -106,7 +106,7 @@ func (s *WorkerTestSuite) SetUpTest(t *C) {
 }
 
 func (s *WorkerTestSuite) RunWorker(config pc.QAN, mysqlConn mysql.Connector, i *iter.Interval) (*report.Result, error) {
-	w := NewWorker(s.logger, config, mysqlConn, nil)
+	w := NewWorker(s.logger, config, mysqlConn)
 	w.ZeroRunTime = true
 	resultChan := make(chan *report.Result)
 	w.Setup(i, resultChan)
@@ -307,7 +307,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 		},
 		CollectFrom: "slowlog",
 	}
-	w := NewWorker(s.logger, config, s.nullmysql, nil)
+	w := NewWorker(s.logger, config, s.nullmysql)
 
 	// Make copy of slow log because test will mv/rename it.
 	cp := exec.Command("cp", inputDir+slowlogFile, "/tmp/"+slowlogFile)
@@ -421,7 +421,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 		},
 		CollectFrom: "slowlog",
 	}
-	w := NewWorker(s.logger, config, s.nullmysql, nil)
+	w := NewWorker(s.logger, config, s.nullmysql)
 
 	// Make copy of slow log because test will mv/rename it.
 	cp := exec.Command("cp", inputDir+slowlogFile, "/tmp/"+slowlogFile)
@@ -589,7 +589,7 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 		},
 		CollectFrom: "slowlog",
 	}
-	w := NewWorker(s.logger, config, conn, nil)
+	w := NewWorker(s.logger, config, conn)
 
 	// First interval: 0 - 736
 	now := time.Now()
@@ -671,7 +671,7 @@ func (s *WorkerTestSuite) TestStop(t *C) {
 		Stop:           []string{},
 		CollectFrom:    "slowlog",
 	}
-	w := NewWorker(s.logger, config, s.nullmysql, nil)
+	w := NewWorker(s.logger, config, s.nullmysql)
 
 	// Make and set a mock log.LogParser. The worker will use this once when
 	// Start() is called instead of making a real slow log parser.
@@ -763,7 +763,7 @@ func (s *WorkerTestSuite) TestResult014(t *C) {
 		MaxSlowLogSize: 1024 * 1024 * 1000,
 	}
 	logChan := make(chan proto.LogEntry, 1000)
-	w := NewWorker(pct.NewLogger(logChan, "w"), config, mock.NewNullMySQL(), nil)
+	w := NewWorker(pct.NewLogger(logChan, "w"), config, mock.NewNullMySQL())
 	i := &iter.Interval{
 		Filename:    inputDir + "slow014.log",
 		StartOffset: 0,

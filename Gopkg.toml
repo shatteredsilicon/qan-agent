@@ -11,6 +11,10 @@
   name = "github.com/percona/go-mysql"
   branch = "master"
 
+[[override]]
+  name = "github.com/shatteredsilicon/ssm"
+  branch = "1.x"
+
 [prune]
   non-go = true
   go-tests = true
