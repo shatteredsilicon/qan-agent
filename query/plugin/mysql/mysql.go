@@ -23,6 +23,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/explain"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/queryinfo"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/summary"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/tableinfo"
 	"github.com/shatteredsilicon/ssm/proto"
@@ -45,6 +46,7 @@ func New() *MySQL {
 		"Explain":   m.explain,
 		"TableInfo": m.tableInfo,
 		"Summary":   m.summary,
+		"QueryInfo": m.queryInfo,
 	}
 
 	return m
@@ -90,6 +92,21 @@ func (m *MySQL) tableInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error
 	}
 
 	return tableinfo.TableInfo(conn, tableInfo)
+}
+
+func (m *MySQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
+	conn := m.connFactory.Make(in.DSN)
+	if err := conn.Connect(); err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	param := &proto.QueryInfoParam{}
+	if err := json.Unmarshal(cmd.Data, param); err != nil {
+		return nil, err
+	}
+
+	return queryinfo.QueryInfo(conn, param)
 }
 
 func (m *MySQL) summary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {

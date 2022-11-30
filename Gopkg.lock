@@ -236,7 +236,7 @@
 
 [[projects]]
   branch = "1.x"
-  digest = "1:a3aeb1a97b226671ae38b5790e4c73dd1ff6cd3ad4d8ddf056f22d5843f88f7f"
+  digest = "1:139f7d406f3e2f9f20b5b09cea4281c7d1feae295b22f3522b1dece88da597c7"
   name = "github.com/shatteredsilicon/ssm"
   packages = [
     "proto",
@@ -246,7 +246,7 @@
     "proto/query",
   ]
   pruneopts = "NT"
-  revision = "b00aab5447e7f481eec150bc4fd6ba1137260b4f"
+  revision = "2571384b63a14b8566ba8fe13759c5e4687f2e84"
 
 [[projects]]
   digest = "1:37ec88f4c87efa6980266ca363d025927f7d58e10ed66fe98945b13347db495f"

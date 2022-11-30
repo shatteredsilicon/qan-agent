@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/util"
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
@@ -38,9 +39,9 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 				tableInfo = res[dbTable]
 			}
 
-			db := escapeString(t.Db)
-			table := escapeString(t.Table)
-			def, err := showCreate(c, ident(db, table))
+			db := util.EscapeString(t.Db)
+			table := util.EscapeString(t.Table)
+			tableType, def, err := showCreate(c, util.Ident(db, table))
 			if err != nil {
 				if tableInfo.Errors == nil {
 					tableInfo.Errors = []string{}
@@ -49,6 +50,7 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 				continue
 			}
 			tableInfo.Create = def
+			tableInfo.Type = tableType
 		}
 	}
 
@@ -60,10 +62,13 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 				res[dbTable] = &proto.TableInfo{}
 				tableInfo = res[dbTable]
 			}
+			if tableInfo.Type == proto.TypeDBView {
+				continue
+			}
 
-			db := escapeString(t.Db)
-			table := escapeString(t.Table)
-			indexes, err := showIndex(c, ident(db, table))
+			db := util.EscapeString(t.Db)
+			table := util.EscapeString(t.Table)
+			indexes, err := showIndex(c, util.Ident(db, table))
 			if err != nil {
 				if tableInfo.Errors == nil {
 					tableInfo.Errors = []string{}
@@ -83,11 +88,14 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 				res[dbTable] = &proto.TableInfo{}
 				tableInfo = res[dbTable]
 			}
+			if tableInfo.Type == proto.TypeDBView {
+				continue
+			}
 
 			// SHOW TABLE STATUS does not accept db.tbl so pass them separately.
-			db := escapeString(t.Db)
-			table := escapeString(t.Table)
-			status, err := showStatus(c, ident(db, ""), table)
+			db := util.EscapeString(t.Db)
+			table := util.EscapeString(t.Table)
+			status, err := showStatus(c, util.Ident(db, ""), table)
 			if err != nil {
 				if tableInfo.Errors == nil {
 					tableInfo.Errors = []string{}
@@ -104,16 +112,36 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 
 // --------------------------------------------------------------------------
 
-func showCreate(c mysql.Connector, dbTable string) (string, error) {
+func showCreate(c mysql.Connector, dbTable string) (proto.DBObjectType, string, error) {
 	// Result from SHOW CREATE TABLE includes two columns, "Table" and
 	// "Create Table", we ignore the first one as we need only "Create Table".
-	var tableName string
-	var tableDef string
-	err := c.DB().QueryRow("SHOW CREATE TABLE "+dbTable).Scan(&tableName, &tableDef)
-	if err == sql.ErrNoRows {
-		err = fmt.Errorf("table %s doesn't exist ", dbTable)
+	var name, def, c3, c4 string
+	var tableType proto.DBObjectType
+
+	rows, err := c.DB().Query("SHOW CREATE TABLE " + dbTable)
+	if err != nil {
+		return tableType, "", err
 	}
-	return tableDef, err
+
+	if rows.Next() {
+		columns, err := rows.Columns()
+		if err != nil {
+			return tableType, "", err
+		}
+		if len(columns) == 0 {
+			return tableType, "", fmt.Errorf("unexpected 'SHOW CREATE TABLE' of table %s", dbTable)
+		}
+
+		if strings.ToLower(columns[0]) == "view" {
+			tableType = proto.TypeDBView
+			err = rows.Scan(&name, &def, &c3, &c4)
+		} else {
+			tableType = proto.TypeDBTable
+			err = rows.Scan(&name, &def)
+		}
+	}
+
+	return tableType, def, err
 }
 
 func showIndex(c mysql.Connector, dbTable string) (map[string][]proto.ShowIndexRow, error) {
@@ -203,34 +231,4 @@ func showStatus(c mysql.Connector, db, table string) (*proto.ShowTableStatus, er
 		err = fmt.Errorf("table %s.%s doesn't exist", db, table)
 	}
 	return status, err
-}
-
-func ident(db, table string) string {
-	// Wrap the idents in ` to handle space and weird chars.
-	if db != "" {
-		db = "`" + db + "`"
-	}
-	if table != "" {
-		table = "`" + table + "`"
-	}
-	// Join the idents if there's two, else return whichever was given.
-	if db != "" && table != "" {
-		return db + "." + table
-	} else if table != "" {
-		return table
-	} else {
-		return db
-	}
-}
-
-func escapeString(v string) string {
-	return strings.NewReplacer(
-		"\x00", "\\0",
-		"\n", "\\n",
-		"\r", "\\r",
-		"\x1a", "\\Z",
-		"'", "\\'",
-		"\"", "\\\"",
-		"\\", "\\\\",
-	).Replace(v)
 }
