@@ -206,29 +206,56 @@ func showIndex(c mysql.Connector, dbTable string) (map[string][]proto.ShowIndexR
 }
 
 func showStatus(c mysql.Connector, db, table string) (*proto.ShowTableStatus, error) {
-	status := &proto.ShowTableStatus{}
-	err := c.DB().QueryRow(fmt.Sprintf("SHOW TABLE STATUS FROM %s WHERE Name='%s'", db, table)).Scan(
-		&status.Name,
-		&status.Engine,
-		&status.Version,
-		&status.RowFormat,
-		&status.Rows,
-		&status.AvgRowLength,
-		&status.DataLength,
-		&status.MaxDataLength,
-		&status.IndexLength,
-		&status.DataFree,
-		&status.AutoIncrement,
-		&status.CreateTime,
-		&status.UpdateTime,
-		&status.CheckTime,
-		&status.Collation,
-		&status.Checksum,
-		&status.CreateOptions,
-		&status.Comment,
-	)
-	if err == sql.ErrNoRows {
-		err = fmt.Errorf("table %s.%s doesn't exist", db, table)
+	status := proto.ShowTableStatus{}
+	rows, err := c.DB().Query(fmt.Sprintf("SHOW TABLE STATUS FROM %s WHERE Name='%s'", db, table))
+	if err != nil {
+		return nil, err
 	}
-	return status, err
+
+	if rows.Next() {
+		cols := []interface{}{
+			&status.Name,
+			&status.Engine,
+			&status.Version,
+			&status.RowFormat,
+			&status.Rows,
+			&status.AvgRowLength,
+			&status.DataLength,
+			&status.MaxDataLength,
+			&status.IndexLength,
+			&status.DataFree,
+			&status.AutoIncrement,
+			&status.CreateTime,
+			&status.UpdateTime,
+			&status.CheckTime,
+			&status.Collation,
+			&status.Checksum,
+			&status.CreateOptions,
+			&status.Comment,
+		}
+
+		sqlCols, err := rows.Columns()
+		if err != nil {
+			if err == sql.ErrNoRows {
+				err = fmt.Errorf("table %s.%s doesn't exist", db, table)
+			}
+			return nil, err
+		}
+
+		appendLen := len(sqlCols) - len(cols)
+		for i := 0; i < appendLen; i++ {
+			col := new(interface{})
+			cols = append(cols, col)
+		}
+
+		err = rows.Scan(cols...)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				err = fmt.Errorf("table %s.%s doesn't exist", db, table)
+			}
+			return nil, err
+		}
+	}
+
+	return &status, nil
 }
