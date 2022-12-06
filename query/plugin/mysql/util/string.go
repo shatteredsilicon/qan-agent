@@ -33,3 +33,8 @@ func EscapeString(v string) string {
 		"\\", "\\\\",
 	).Replace(v)
 }
+
+// Placeholders generate SQL placeholders
+func Placeholders(length int) string {
+	return strings.Join(strings.Split(strings.Repeat("?", length), ""), ",")
+}
