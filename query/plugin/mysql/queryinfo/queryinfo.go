@@ -36,10 +36,11 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (proto.QueryInfoR
 
 	if len(param.Procedure) > 0 {
 		for _, p := range param.Procedure {
-			queryInfo, ok := res[p.String()]
+			dbProcedure := p.DB + "." + p.Name
+			queryInfo, ok := res[dbProcedure]
 			if !ok {
-				res[p.String()] = &proto.QueryInfo{}
-				queryInfo = res[p.String()]
+				res[dbProcedure] = &proto.QueryInfo{}
+				queryInfo = res[dbProcedure]
 			}
 
 			db := util.EscapeString(p.DB)
