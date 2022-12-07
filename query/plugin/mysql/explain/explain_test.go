@@ -124,7 +124,7 @@ func testExplainWithoutQuery(t *testing.T, conn mysql.Connector) {
 	db := ""
 	query := "  "
 
-	_, err := Explain(conn, db, query, true)
+	_, err := Explain(conn, db, query, true, false)
 	assert.NotNil(t, err)
 
 	// This is not a good practice. We should not care about the error type but in this case, this is
@@ -224,7 +224,7 @@ func testExplainWithoutDb(t *testing.T, conn mysql.Connector) {
 		JSON: string(expectedJSON),
 	}
 
-	gotExplainResult, err := Explain(conn, db, query, true)
+	gotExplainResult, err := Explain(conn, db, query, true, false)
 	require.NoError(t, err)
 
 	// Check the json first but only if supported...
@@ -245,7 +245,7 @@ func testExplainWithDb(t *testing.T, conn mysql.Connector) {
 	db := "information_schema"
 	query := "SELECT table_name FROM tables WHERE table_name='tables'"
 
-	gotExplainResult, err := Explain(conn, db, query, true)
+	gotExplainResult, err := Explain(conn, db, query, true, false)
 	require.NoError(t, err)
 
 	expectedJSONQuery := JsonQuery{

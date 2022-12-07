@@ -18,7 +18,7 @@
 package mock
 
 import (
-	"github.com/percona/go-mysql/log"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 )
 
 type LogParser struct {

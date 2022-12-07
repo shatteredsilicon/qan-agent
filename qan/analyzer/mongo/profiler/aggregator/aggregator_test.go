@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/percona/go-mysql/event"
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
@@ -53,11 +53,11 @@ func TestAggregator_Add(t *testing.T) {
 			UUID:    config.UUID,
 			StartTs: timeStart,
 			EndTs:   timeEnd,
-			Global: &event.Class{
+			Global: &qan.Class{
 				TotalQueries:  1,
 				UniqueQueries: 1,
-				Metrics: &event.Metrics{
-					TimeMetrics: map[string]*event.TimeStats{
+				Metrics: &qan.Metrics{
+					TimeMetrics: map[string]*qan.TimeStats{
 						"Query_time": {
 							Sum: 1,
 							Med: event.Float64(1),
@@ -67,7 +67,7 @@ func TestAggregator_Add(t *testing.T) {
 							Max: event.Float64(1),
 						},
 					},
-					NumberMetrics: map[string]*event.NumberStats{
+					NumberMetrics: map[string]*qan.NumberStats{
 						"Bytes_sent": {
 							Sum: 0,
 							Min: event.Uint64(0),
@@ -93,16 +93,16 @@ func TestAggregator_Add(t *testing.T) {
 							Max: event.Uint64(42),
 						},
 					},
-					BoolMetrics: map[string]*event.BoolStats{},
+					BoolMetrics: map[string]*qan.BoolStats{},
 				},
 			},
-			Class: []*event.Class{
+			Class: []*qan.Class{
 				{
 					Id:            "d41d8cd98f00b204e9800998ecf8427e",
 					TotalQueries:  1,
 					UniqueQueries: 1,
-					Metrics: &event.Metrics{
-						TimeMetrics: map[string]*event.TimeStats{
+					Metrics: &qan.Metrics{
+						TimeMetrics: map[string]*qan.TimeStats{
 							"Query_time": {
 								Sum: 1,
 								Min: event.Float64(1),
@@ -112,7 +112,7 @@ func TestAggregator_Add(t *testing.T) {
 								Max: event.Float64(1),
 							},
 						},
-						NumberMetrics: map[string]*event.NumberStats{
+						NumberMetrics: map[string]*qan.NumberStats{
 							"Bytes_sent": {
 								Sum: 0,
 								Min: event.Uint64(0),
@@ -138,9 +138,9 @@ func TestAggregator_Add(t *testing.T) {
 								Max: event.Uint64(42),
 							},
 						},
-						BoolMetrics: map[string]*event.BoolStats{},
+						BoolMetrics: map[string]*qan.BoolStats{},
 					},
-					Example: &event.Example{},
+					Example: &qan.Example{},
 				},
 			},
 		}

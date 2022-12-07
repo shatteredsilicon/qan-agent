@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/go-mysql/event"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
@@ -62,8 +62,11 @@ func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Inte
 		StartTs: startTime,
 		EndTs:   endTime,
 		RunTime: result.RunTime,
-		Global:  result.Global,
-		Class:   result.Class,
+		Global:  result.Global.Class,
+		Class:   make([]*qan.Class, len(result.Class)),
+	}
+	for i := range result.Class {
+		report.Class[i] = result.Class[i].Class
 	}
 	if interval != nil {
 		size, err := pct.FileSize(interval.Filename)
@@ -88,14 +91,17 @@ func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Inte
 	}
 
 	// Top queries
-	report.Class = result.Class[0:config.ReportLimit]
+	report.Class = make([]*qan.Class, config.ReportLimit)
+	for i := range result.Class[0:config.ReportLimit] {
+		report.Class[i] = result.Class[i].Class
+	}
 
 	// Low-ranking Queries
 	lrq := event.NewClass("lrq", "/* low-ranking queries */", false)
 	for _, class := range result.Class[config.ReportLimit:n] {
 		lrq.AddClass(class)
 	}
-	report.Class = append(report.Class, lrq)
+	report.Class = append(report.Class, lrq.Class)
 
 	return report // top classes, the rest as LRQ
 }
