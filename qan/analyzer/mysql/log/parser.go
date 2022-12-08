@@ -28,21 +28,23 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package util
+package log
 
 import (
 	"bufio"
+	"database/sql"
 	"fmt"
 	"io"
 	l "log"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
-	"github.com/percona/go-mysql/log"
+	"github.com/shatteredsilicon/ssm/proto"
 )
 
 // Regular expressions to match important lines in slow log.
@@ -61,23 +63,25 @@ var (
 // SlowLogParser parses a MySQL slow log. It implements the LogParser interface.
 type SlowLogParser struct {
 	reader io.ReadSeeker
-	opt    log.Options
+	opt    Options
 	// --
-	stopChan    chan bool
-	eventChan   chan *log.Event
-	inHeader    bool
-	inQuery     bool
-	headerLines uint
-	queryLines  uint64
-	bytesRead   uint64
-	lineOffset  uint64
-	endOffset   uint64
-	stopped     bool
-	event       *log.Event
+	stopChan        chan bool
+	eventChan       chan *Event
+	inHeader        bool
+	inQuery         bool
+	inExplain       bool
+	explaiinColumns []string
+	headerLines     uint
+	queryLines      uint64
+	bytesRead       uint64
+	lineOffset      uint64
+	endOffset       uint64
+	stopped         bool
+	event           *Event
 }
 
 // NewSlowLogParser returns a new SlowLogParser that reads from the open file.
-func NewSlowLogParser(r io.ReadSeeker, opt log.Options) *SlowLogParser {
+func NewSlowLogParser(r io.ReadSeeker, opt Options) *SlowLogParser {
 	if opt.DefaultLocation == nil {
 		// Old MySQL format assumes time is taken from SYSTEM.
 		opt.DefaultLocation = time.Local
@@ -88,21 +92,21 @@ func NewSlowLogParser(r io.ReadSeeker, opt log.Options) *SlowLogParser {
 		opt:    opt,
 		// --
 		stopChan:    make(chan bool, 1),
-		eventChan:   make(chan *log.Event),
+		eventChan:   make(chan *Event),
 		inHeader:    false,
 		inQuery:     false,
 		headerLines: 0,
 		queryLines:  0,
 		lineOffset:  0,
 		bytesRead:   opt.StartOffset,
-		event:       log.NewEvent(),
+		event:       NewEvent(),
 	}
 	return p
 }
 
 // EventChan returns the unbuffered event channel on which the caller can
 // receive events.
-func (p *SlowLogParser) EventChan() <-chan *log.Event {
+func (p *SlowLogParser) EventChan() <-chan *Event {
 	return p.eventChan
 }
 
@@ -174,14 +178,22 @@ SCANNER_LOOP:
 			if p.opt.Debug {
 				l.Println("meta")
 			}
+			p.inExplain = false
 			continue
 		}
 
 		// PMM-1834: Filter out empty comments and MariaDB explain:
-		if line == "#\n" || strings.HasPrefix(line, "# explain:") {
+		if line == "#\n" {
+			p.inExplain = false
 			continue
 		}
 
+		if strings.HasPrefix(line, "# explain:") {
+			p.parseExplain(line)
+			continue
+		}
+
+		p.inExplain = false
 		// Remove \n.
 		line = line[0 : lineLen-1]
 
@@ -398,6 +410,60 @@ func (p *SlowLogParser) parseAdmin(line string) {
 	}
 }
 
+func (p *SlowLogParser) parseExplain(line string) {
+	splitStrs := strings.SplitN(line, ":", 2)
+	if len(splitStrs) != 2 {
+		return
+	}
+
+	strs := strings.Fields(splitStrs[1])
+	if !p.inExplain { // first line, parse it as the column headers
+		p.inExplain = true
+		p.explaiinColumns = strs
+		p.event.ExplainRows = make([]proto.ExplainRow, 0)
+		return
+	}
+
+	row := proto.ExplainRow{}
+	t := reflect.TypeOf(row)
+	for columnIndex, str := range strs {
+		if len(p.explaiinColumns) <= columnIndex {
+			break
+		}
+
+		for i := 0; i < t.NumField(); i++ {
+			field := t.Field(i)
+			if field.Tag.Get("slowlog") != p.explaiinColumns[columnIndex] {
+				continue
+			}
+
+			if field.Type.ConvertibleTo(reflect.TypeOf(proto.NullInt64{})) {
+				val := sql.NullInt64{}
+				if strings.ToUpper(str) != "NULL" {
+					val.Valid = true
+					val.Int64, _ = strconv.ParseInt(str, 10, 64)
+				}
+				reflect.ValueOf(&row).Elem().Field(i).Set(reflect.ValueOf(proto.NullInt64{NullInt64: val}))
+			} else if field.Type.ConvertibleTo(reflect.TypeOf(proto.NullFloat64{})) {
+				val := sql.NullFloat64{}
+				if strings.ToUpper(str) != "NULL" {
+					val.Valid = true
+					val.Float64, _ = strconv.ParseFloat(str, 64)
+				}
+				reflect.ValueOf(&row).Elem().Field(i).Set(reflect.ValueOf(proto.NullFloat64{NullFloat64: val}))
+			} else if field.Type.ConvertibleTo(reflect.TypeOf(proto.NullString{})) {
+				val := sql.NullString{}
+				if str != "NULL" {
+					val.Valid = true
+					val.String = str
+				}
+				reflect.ValueOf(&row).Elem().Field(i).Set(reflect.ValueOf(proto.NullString{NullString: val}))
+			}
+		}
+	}
+	p.event.ExplainRows = append(p.event.ExplainRows, row)
+}
+
 func (p *SlowLogParser) sendEvent(inHeader bool, inQuery bool) {
 	if p.opt.Debug {
 		l.Println("send event")
@@ -407,11 +473,13 @@ func (p *SlowLogParser) sendEvent(inHeader bool, inQuery bool) {
 
 	// Make a new event and reset our metadata.
 	defer func() {
-		p.event = log.NewEvent()
+		p.event = NewEvent()
 		p.headerLines = 0
 		p.queryLines = 0
 		p.inHeader = inHeader
 		p.inQuery = inQuery
+		p.inExplain = false
+		p.event.ExplainRows = nil
 	}()
 
 	if _, ok := p.event.TimeMetrics["Query_time"]; !ok {

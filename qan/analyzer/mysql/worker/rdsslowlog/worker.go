@@ -31,14 +31,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	awsRDS "github.com/aws/aws-sdk-go/service/rds"
-	"github.com/percona/go-mysql/event"
-	"github.com/percona/go-mysql/log"
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/rds"
 	"github.com/shatteredsilicon/ssm/proto"
@@ -321,7 +320,7 @@ func (w *Worker) MakeLogParser(data []byte, opts log.Options) log.LogParser {
 		w.logParser = nil
 		return p
 	}
-	return util.NewSlowLogParser(bytes.NewReader(data), opts)
+	return log.NewSlowLogParser(bytes.NewReader(data), opts)
 }
 
 // --------------------------------------------------------------------------

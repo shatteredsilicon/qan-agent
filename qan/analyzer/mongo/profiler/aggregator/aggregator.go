@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/percona/go-mysql/event"
 	"github.com/percona/percona-toolkit/src/go/mongolib/fingerprinter"
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
 	mongostats "github.com/percona/percona-toolkit/src/go/mongolib/stats"
@@ -14,6 +13,7 @@ import (
 	"github.com/shatteredsilicon/ssm/proto/qan"
 
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/status"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 )
 
@@ -263,7 +263,7 @@ func (self *Aggregator) createResult() *report.Result {
 				db = s[0]
 			}
 
-			class.Example = &event.Example{
+			class.Example = &qan.Example{
 				QueryTime: queryInfo.QueryTime.Total,
 				Db:        db,
 				Query:     queryInfo.Query,
@@ -295,8 +295,8 @@ func (self *Aggregator) createResult() *report.Result {
 
 }
 
-func newEventNumberStats(s mongostats.Statistics) *event.NumberStats {
-	return &event.NumberStats{
+func newEventNumberStats(s mongostats.Statistics) *qan.NumberStats {
+	return &qan.NumberStats{
 		Sum: uint64(s.Total),
 		Min: event.Uint64(uint64(s.Min)),
 		Avg: event.Uint64(uint64(s.Avg)),
@@ -306,8 +306,8 @@ func newEventNumberStats(s mongostats.Statistics) *event.NumberStats {
 	}
 }
 
-func newEventTimeStatsInMilliseconds(s mongostats.Statistics) *event.TimeStats {
-	return &event.TimeStats{
+func newEventTimeStatsInMilliseconds(s mongostats.Statistics) *qan.TimeStats {
+	return &qan.TimeStats{
 		Sum: s.Total / 1000,
 		Min: event.Float64(s.Min / 1000),
 		Avg: event.Float64(s.Avg / 1000),

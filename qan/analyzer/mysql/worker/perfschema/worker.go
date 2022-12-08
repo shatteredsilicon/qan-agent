@@ -27,13 +27,14 @@ import (
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
-	"github.com/percona/go-mysql/event"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
 // A DigestRow is a row from performance_schema.events_statements_summary_by_digest.
@@ -786,35 +787,35 @@ ClassLoop:
 		stats := event.NewMetrics()
 
 		// Time metrics are in picoseconds, so multiply by 10^-12 to convert to seconds.
-		stats.TimeMetrics["Query_time"] = &event.TimeStats{
+		stats.TimeMetrics["Query_time"] = &qan.TimeStats{
 			Sum: float64(d.SumTimerWait) * math.Pow10(-12),
 			Min: event.Float64(float64(d.MinTimerWait) * math.Pow10(-12)),
 			Avg: event.Float64(float64(d.AvgTimerWait) * math.Pow10(-12)),
 			Max: event.Float64(float64(d.MaxTimerWait) * math.Pow10(-12)),
 		}
 
-		stats.TimeMetrics["Lock_time"] = &event.TimeStats{
+		stats.TimeMetrics["Lock_time"] = &qan.TimeStats{
 			Sum: float64(d.SumLockTime) * math.Pow10(-12),
 		}
 
-		stats.NumberMetrics["Errors"] = &event.NumberStats{Sum: d.SumErrors}
-		stats.NumberMetrics["Warnings"] = &event.NumberStats{Sum: d.SumWarnings}
-		stats.NumberMetrics["Rows_affected"] = &event.NumberStats{Sum: d.SumRowsAffected}
-		stats.NumberMetrics["Rows_sent"] = &event.NumberStats{Sum: d.SumRowsSent}
-		stats.NumberMetrics["Rows_examined"] = &event.NumberStats{Sum: d.SumRowsExamined}
-		stats.BoolMetrics["Tmp_table_on_disk"] = &event.BoolStats{Sum: d.SumCreatedTmpDiskTables}
-		stats.BoolMetrics["Tmp_table"] = &event.BoolStats{Sum: d.SumCreatedTmpTables}
-		stats.BoolMetrics["Full_join"] = &event.BoolStats{Sum: d.SumSelectFullJoin}
-		stats.NumberMetrics["Select_full_range_join"] = &event.NumberStats{Sum: d.SumSelectFullRangeJoin}
-		stats.NumberMetrics["Select_range"] = &event.NumberStats{Sum: d.SumSelectRange}
-		stats.NumberMetrics["Select_range_check"] = &event.NumberStats{Sum: d.SumSelectRangeCheck}
-		stats.BoolMetrics["Full_scan"] = &event.BoolStats{Sum: d.SumSelectScan}
-		stats.NumberMetrics["Merge_passes"] = &event.NumberStats{Sum: d.SumSortMergePasses}
-		stats.NumberMetrics["Sort_range"] = &event.NumberStats{Sum: d.SumSortRange}
-		stats.NumberMetrics["Sort_rows"] = &event.NumberStats{Sum: d.SumSortRows}
-		stats.NumberMetrics["Sort_scan"] = &event.NumberStats{Sum: d.SumSortScan}
-		stats.NumberMetrics["No_index_used"] = &event.NumberStats{Sum: d.SumNoIndexUsed}
-		stats.NumberMetrics["No_good_index_used"] = &event.NumberStats{Sum: d.SumNoGoodIndexUsed}
+		stats.NumberMetrics["Errors"] = &qan.NumberStats{Sum: d.SumErrors}
+		stats.NumberMetrics["Warnings"] = &qan.NumberStats{Sum: d.SumWarnings}
+		stats.NumberMetrics["Rows_affected"] = &qan.NumberStats{Sum: d.SumRowsAffected}
+		stats.NumberMetrics["Rows_sent"] = &qan.NumberStats{Sum: d.SumRowsSent}
+		stats.NumberMetrics["Rows_examined"] = &qan.NumberStats{Sum: d.SumRowsExamined}
+		stats.BoolMetrics["Tmp_table_on_disk"] = &qan.BoolStats{Sum: d.SumCreatedTmpDiskTables}
+		stats.BoolMetrics["Tmp_table"] = &qan.BoolStats{Sum: d.SumCreatedTmpTables}
+		stats.BoolMetrics["Full_join"] = &qan.BoolStats{Sum: d.SumSelectFullJoin}
+		stats.NumberMetrics["Select_full_range_join"] = &qan.NumberStats{Sum: d.SumSelectFullRangeJoin}
+		stats.NumberMetrics["Select_range"] = &qan.NumberStats{Sum: d.SumSelectRange}
+		stats.NumberMetrics["Select_range_check"] = &qan.NumberStats{Sum: d.SumSelectRangeCheck}
+		stats.BoolMetrics["Full_scan"] = &qan.BoolStats{Sum: d.SumSelectScan}
+		stats.NumberMetrics["Merge_passes"] = &qan.NumberStats{Sum: d.SumSortMergePasses}
+		stats.NumberMetrics["Sort_range"] = &qan.NumberStats{Sum: d.SumSortRange}
+		stats.NumberMetrics["Sort_rows"] = &qan.NumberStats{Sum: d.SumSortRows}
+		stats.NumberMetrics["Sort_scan"] = &qan.NumberStats{Sum: d.SumSortScan}
+		stats.NumberMetrics["No_index_used"] = &qan.NumberStats{Sum: d.SumNoIndexUsed}
+		stats.NumberMetrics["No_good_index_used"] = &qan.NumberStats{Sum: d.SumNoGoodIndexUsed}
 
 		// Create and save the pre-aggregated class.  Using only last 16 digits
 		// of checksum is historical: pt-query-digest does the same:
@@ -823,7 +824,7 @@ ClassLoop:
 		ex, ok := w.queryExamples[classId]
 		class := event.NewClass(classId, class.DigestText, ok)
 		if ok {
-			class.Example = &event.Example{
+			class.Example = &qan.Example{
 				QueryTime: float64(ex.LastSeen.Unix()),
 				Db:        ex.Schema.String,
 				Query:     ex.SQLText.String,

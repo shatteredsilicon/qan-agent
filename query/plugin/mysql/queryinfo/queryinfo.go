@@ -10,10 +10,53 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
-func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (proto.QueryInfoResult, error) {
-	res := make(proto.QueryInfoResult)
+func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfoResult, error) {
+	res := make(map[string]*proto.QueryInfo)
+	var dbName string
+	var guessDB *proto.GuessDB
+	var err error
 
 	if len(param.Table) > 0 {
+		var dbMissed bool
+		tableNames := make([]string, len(param.Table))
+		for i := range param.Table {
+			tableNames[i] = param.Table[i].Table
+			if param.Table[i].Db == "" {
+				dbMissed = true
+			} else {
+				dbName = param.Table[i].Db
+				break
+			}
+		}
+
+		if dbMissed && dbName == "" {
+			guessDB, err = getGuessDBOfTables(c, tableNames)
+			if err != nil {
+				return nil, err
+			}
+			if guessDB != nil {
+				dbName = guessDB.DB
+			}
+		}
+
+		if dbMissed && dbName != "" {
+			for i := range param.Table {
+				if param.Table[i].Db == "" {
+					param.Table[i].Db = dbName
+				}
+			}
+			for i := range param.Index {
+				if param.Index[i].Db == "" {
+					param.Index[i].Db = dbName
+				}
+			}
+			for i := range param.Status {
+				if param.Status[i].Db == "" {
+					param.Status[i].Db = dbName
+				}
+			}
+		}
+
 		tableRes, err := tableinfo.TableInfo(c, &proto.TableInfoQuery{
 			UUID:   param.UUID,
 			Create: param.Table,
@@ -21,7 +64,7 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (proto.QueryInfoR
 			Status: param.Status,
 		})
 		if err != nil {
-			return res, err
+			return nil, err
 		}
 		for k, v := range tableRes {
 			res[k] = &proto.QueryInfo{
@@ -35,11 +78,38 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (proto.QueryInfoR
 	}
 
 	if len(param.Procedure) > 0 {
+		var dbMissed bool
+		procedureNames := make([]string, len(param.Procedure))
+		for i := range param.Procedure {
+			procedureNames[i] = param.Procedure[i].Name
+			if param.Procedure[i].DB == "" {
+				dbMissed = true
+			} else {
+				dbName = param.Procedure[i].DB
+				break
+			}
+		}
+
+		if dbMissed && dbName == "" {
+			guessDB, err = getGuessDBOfProcedures(c, procedureNames)
+			if err != nil {
+				return nil, err
+			}
+			if guessDB != nil {
+				dbName = guessDB.DB
+			}
+		}
+
 		for _, p := range param.Procedure {
-			queryInfo, ok := res[p.String()]
+			if p.DB == "" {
+				p.DB = dbName
+			}
+
+			dbProcedure := p.DB + "." + p.Name
+			queryInfo, ok := res[dbProcedure]
 			if !ok {
-				res[p.String()] = &proto.QueryInfo{}
-				queryInfo = res[p.String()]
+				res[dbProcedure] = &proto.QueryInfo{}
+				queryInfo = res[dbProcedure]
 			}
 
 			db := util.EscapeString(p.DB)
@@ -57,7 +127,10 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (proto.QueryInfoR
 		}
 	}
 
-	return res, nil
+	return &proto.QueryInfoResult{
+		GuessDB: guessDB,
+		Info:    res,
+	}, nil
 }
 
 func showCreateProcedure(c mysql.Connector, name string) (string, error) {
@@ -81,4 +154,86 @@ func showCreateView(c mysql.Connector, name string) (string, error) {
 		err = fmt.Errorf("view %s doesn't exist ", name)
 	}
 	return def, err
+}
+
+// getGuessDBOfTables tries to guess the database name of
+// tableNames (using information_schema.tables), the
+// database with least ambiguity will be returned,
+// a nil result will be returned if the tables are not found
+func getGuessDBOfTables(c mysql.Connector, tableNames []string) (*proto.GuessDB, error) {
+	if len(tableNames) == 0 {
+		return nil, nil
+	}
+
+	names := make([]interface{}, len(tableNames))
+	for i := range tableNames {
+		names[i] = tableNames[i]
+	}
+
+	var db string
+	var count int
+	err := c.DB().QueryRow(fmt.Sprintf(`
+		SELECT t.table_schema, tt.schema_count
+		FROM information_schema.tables t
+		JOIN (
+			SELECT table_name, COUNT(table_schema) AS schema_count
+			FROM information_schema.tables
+			GROUP BY table_name
+		) tt ON t.table_name = tt.table_name
+		WHERE t.table_name IN (%s)
+		ORDER BY tt.schema_count ASC, t.table_rows IS NULL ASC, t.table_rows DESC
+		LIMIT 1
+	`, util.Placeholders(len(names))), names...).Scan(&db, &count)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &proto.GuessDB{
+		DB:          db,
+		IsAmbiguous: count != 1,
+	}, nil
+}
+
+// getGuessDBOfProcedures tries to guess the database name of
+// procedureNames (using information_schema.routines), the
+// database with least ambiguity will be returned,
+// a nil result will be returned if the procedures are not found
+func getGuessDBOfProcedures(c mysql.Connector, procedureNames []string) (*proto.GuessDB, error) {
+	if len(procedureNames) == 0 {
+		return nil, nil
+	}
+
+	names := make([]interface{}, len(procedureNames))
+	for i := range procedureNames {
+		names[i] = procedureNames[i]
+	}
+
+	var db string
+	var count int
+	err := c.DB().QueryRow(fmt.Sprintf(`
+		SELECT t.routine_schema, tt.schema_count
+		FROM information_schema.routines t
+		JOIN (
+			SELECT specific_name, COUNT(routine_schema) AS schema_count
+			FROM information_schema.routines
+			GROUP BY specific_name
+		) tt ON t.specific_name = tt.specific_name
+		WHERE t.routine_type = 'PROCEDURE' AND t.specific_name IN (%s)
+		ORDER BY tt.schema_count ASC
+		LIMIT 1
+	`, util.Placeholders(len(names))), names...).Scan(&db, &count)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &proto.GuessDB{
+		DB:          db,
+		IsAmbiguous: count != 1,
+	}, nil
 }

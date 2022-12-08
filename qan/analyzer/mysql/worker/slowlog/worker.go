@@ -25,14 +25,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/percona/go-mysql/event"
-	"github.com/percona/go-mysql/log"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
@@ -420,7 +419,7 @@ func (w *Worker) MakeLogParser(file *os.File, opts log.Options) log.LogParser {
 		w.logParser = nil
 		return p
 	}
-	return util.NewSlowLogParser(file, opts)
+	return log.NewSlowLogParser(file, opts)
 }
 
 // --------------------------------------------------------------------------

@@ -26,11 +26,11 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
-func Explain(c mysql.Connector, db, query string, convert bool) (*proto.ExplainResult, error) {
+func Explain(c mysql.Connector, db, query string, convert, ignoreClassic bool) (*proto.ExplainResult, error) {
 	if db != "" && !strings.HasPrefix(db, "`") {
 		db = "`" + db + "`"
 	}
-	explainResult, err := explain(c, db, query)
+	explainResult, err := explain(c, db, query, ignoreClassic)
 	if err != nil {
 		// MySQL 5.5 returns syntax error because it doesn't support non-SELECT EXPLAIN.
 		// MySQL 5.6 non-SELECT EXPLAIN requires privs for the SQL statement.
@@ -40,7 +40,7 @@ func Explain(c mysql.Connector, db, query string, convert bool) (*proto.ExplainR
 			if query == "" {
 				return nil, fmt.Errorf("cannot convert query to SELECT")
 			}
-			explainResult, err = explain(c, db, query) // query converted to SELECT
+			explainResult, err = explain(c, db, query, ignoreClassic) // query converted to SELECT
 		}
 		if err != nil {
 			return nil, err
@@ -51,7 +51,7 @@ func Explain(c mysql.Connector, db, query string, convert bool) (*proto.ExplainR
 
 // --------------------------------------------------------------------------
 
-func explain(c mysql.Connector, db, query string) (*proto.ExplainResult, error) {
+func explain(c mysql.Connector, db, query string, ignoreClassic bool) (*proto.ExplainResult, error) {
 	// Transaction because we need to ensure USE and EXPLAIN are run in one connection
 	tx, err := c.DB().Begin()
 	if err != nil {
@@ -68,19 +68,17 @@ func explain(c mysql.Connector, db, query string) (*proto.ExplainResult, error) 
 		}
 	}
 
-	classicExplain, err := classicExplain(c, tx, query)
-	if err != nil {
-		return nil, err
+	explain := &proto.ExplainResult{}
+	if !ignoreClassic {
+		explain.Classic, err = classicExplain(c, tx, query)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	jsonExplain, err := jsonExplain(c, tx, query)
+	explain.JSON, err = jsonExplain(c, tx, query)
 	if err != nil {
 		return nil, err
-	}
-
-	explain := &proto.ExplainResult{
-		Classic: classicExplain,
-		JSON:    jsonExplain,
 	}
 
 	return explain, nil
