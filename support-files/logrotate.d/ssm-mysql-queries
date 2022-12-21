@@ -1,0 +1,4 @@
+/var/log/ssm-mysql-queries.log {
+    rotate 30
+    daily
+}
