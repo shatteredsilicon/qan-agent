@@ -66,6 +66,8 @@ type DigestRow struct {
 	SumSortScan             uint64
 	SumNoIndexUsed          uint64
 	SumNoGoodIndexUsed      uint64
+
+	StatementID uint64 // for identifying prepared_statements_instances
 }
 
 // A PreStmtRow is a row from prepared_statements_instances
@@ -108,6 +110,8 @@ func (row *PreStmtRow) ConvertToDigestRow() *DigestRow {
 	preStmtSQL := sha256.Sum256([]byte(fmt.Sprintf("PREPARE %s FROM %s", row.StatementName, row.SQLText)))
 	digestRow.Digest = fmt.Sprintf("%x", preStmtSQL)
 	digestRow.DigestText = row.SQLText
+	digestRow.Schema = fmt.Sprintf("%d", row.StatementID) // use StatementID as a fake schema to differ
+	digestRow.StatementID = row.StatementID
 	digestRow.CountStar = uint(row.CountExecute)
 	digestRow.SumTimerWait = row.SumTimerExecute
 	digestRow.MinTimerWait = row.MinTimerExecute
@@ -511,8 +515,11 @@ func (w *Worker) Run() (*report.Result, error) {
 }
 
 func (w *Worker) Cleanup() error {
-	w.logger.Debug("Cleanup:call:", w.iter.Number)
-	defer w.logger.Debug("Cleanup:return:", w.iter.Number)
+	if w.iter != nil { // the iter might be set to nil before the cleanup
+		w.logger.Debug("Cleanup:call:", w.iter.Number)
+		defer w.logger.Debug("Cleanup:return:", w.iter.Number)
+	}
+
 	w.digests.MergeCurr()
 	last := fmt.Sprintf("rows: %d, fetch: %s, prep: %s",
 		w.lastRowCnt, w.lastFetchTime.Format(time.RFC3339), pct.Duration(w.lastPrepTime))
@@ -644,11 +651,21 @@ func (w *Worker) getSnapshot() (Snapshot, error) {
 				classId = strings.ToUpper(row.Digest[16:32])
 			}
 			if class, haveClass := curr[classId]; haveClass {
-				if _, haveRow := class.Rows[row.Schema]; haveRow {
+				if _, haveRow := class.Rows[row.Schema]; !haveRow {
+					class.Rows[row.Schema] = row
+					continue
+				}
+
+				// row from events_statements_summary_by_digest
+				if class.Rows[row.Schema].StatementID == 0 {
 					w.logger.Error("Got class twice: ", row.Schema, row.Digest)
 					continue
 				}
-				class.Rows[row.Schema] = row
+
+				// row from prepared_statements_instances
+				if row.CountStar > class.Rows[row.Schema].CountStar {
+					class.Rows[row.Schema] = row
+				}
 			} else {
 				// Get class digest text (fingerprint).
 				digestText := row.DigestText
