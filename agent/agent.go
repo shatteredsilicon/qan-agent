@@ -29,6 +29,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -420,6 +421,7 @@ func (agent *Agent) handleCmd(cmd *proto.Cmd) {
 			if err := recover(); err != nil {
 				agent.logger.Error("Cmd crash:", cmd, err)
 				reply = cmd.Reply(nil, fmt.Errorf("%s", err)) // err is type interface{}, not error
+				debug.PrintStack()
 			}
 			cmdReply <- reply
 		}()
