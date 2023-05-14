@@ -187,6 +187,13 @@ func showIndex(c mysql.Connector, dbTable string) (map[string][]proto.ShowIndexR
 			dest = dest[:len(columns)]
 		}
 
+		// Append dest to number of columns
+		appendLen := len(columns) - len(dest)
+		for i := 0; i < appendLen; i++ {
+			col := new(interface{})
+			dest = append(dest, col)
+		}
+
 		err := rows.Scan(dest...)
 		if err != nil {
 			return nil, err
