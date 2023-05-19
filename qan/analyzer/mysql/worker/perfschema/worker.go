@@ -275,7 +275,10 @@ SELECT
 
 			var omit bool
 			for _, omitQuery := range filterOmit {
-				if strings.TrimSpace(strings.ToLower(row.DigestText)) == strings.TrimSpace(strings.ToLower(omitQuery)) {
+				if strings.HasPrefix(
+					strings.TrimSpace(strings.ToLower(row.DigestText)),
+					strings.TrimSpace(strings.ToLower(omitQuery)),
+				) {
 					omit = true
 					break
 				}
@@ -397,7 +400,10 @@ SELECT
 
 			var omit bool
 			for _, omitQuery := range filterOmit {
-				if strings.TrimSpace(strings.ToLower(row.SQLText)) == strings.TrimSpace(strings.ToLower(omitQuery)) {
+				if strings.HasPrefix(
+					strings.TrimSpace(strings.ToLower(row.SQLText)),
+					strings.TrimSpace(strings.ToLower(omitQuery)),
+				) {
 					omit = true
 					break
 				}

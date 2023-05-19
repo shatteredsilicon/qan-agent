@@ -344,7 +344,10 @@ EVENT_LOOP:
 			// check if query should be omitted first
 			var omit bool
 			for _, omitQuery := range w.config.FilterOmit {
-				if strings.TrimSpace(strings.ToLower(fingerprint)) == strings.TrimSpace(strings.ToLower(omitQuery)) {
+				if strings.HasPrefix(
+					strings.TrimSpace(strings.ToLower(fingerprint)),
+					strings.TrimSpace(strings.ToLower(omitQuery)),
+				) {
 					omit = true
 					break
 				}
