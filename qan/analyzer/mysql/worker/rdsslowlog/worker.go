@@ -490,6 +490,11 @@ EVENT_LOOP:
 			// queries, group, and aggregate.
 			aggregator := event.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
 			for event := range p.EventChan() {
+				if qTime, ok := event.TimeMetrics["Query_time"]; !ok || qTime == 0 {
+					// ignore log entry that has 0 Query_time
+					continue
+				}
+
 				if record.marker != nil {
 					w.status.Update(w.name, fmt.Sprintf("Parsing rds slow log file %s, marker %s", *file.LogFileName, *record.marker))
 				} else {
