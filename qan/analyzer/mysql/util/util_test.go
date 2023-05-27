@@ -38,3 +38,56 @@ func TestSlowLogMySQLBasic(t *testing.T) {
 		"SET GLOBAL slow_query_log=OFF",
 	}, off)
 }
+
+func TestSplitSlowLog(t *testing.T) {
+	splitLogs := []struct {
+		Log           []byte
+		CompleteLog   []byte
+		IncompleteLog []byte
+	}{
+		{
+			Log: []byte(`/rdsdbbin/mysql/bin/mysqld, Version: 8.0.32 (Source distribution). started with:
+Tcp port: 3306  Unix socket: /tmp/mysql.sock
+Time                 Id Command    Argument
+# Time: 2023-05-12T08:00:06.278162Z
+# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     7
+# Query_time: 0.002968  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1683878406;
+FLUSH SLOW LOGS;
+# Time: 2023-05-12T08:00:06.279095Z
+# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     7
+# Query_time: 0.000077  Lock_time:`),
+			CompleteLog: []byte(`/rdsdbbin/mysql/bin/mysqld, Version: 8.0.32 (Source distribution). started with:
+Tcp port: 3306  Unix socket: /tmp/mysql.sock
+Time                 Id Command    Argument
+# Time: 2023-05-12T08:00:06.278162Z
+# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     7
+# Query_time: 0.002968  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1683878406;
+FLUSH SLOW LOGS;
+`),
+			IncompleteLog: []byte(`# Time: 2023-05-12T08:00:06.279095Z
+# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     7
+# Query_time: 0.000077  Lock_time:`),
+		},
+		{
+			Log: []byte(`# Time: 2023-05-12T08:00:06.279095Z
+# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     7
+# Query_time: 0.000077  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1
+SET timestamp=1683878406;
+SELECT 1;`),
+			CompleteLog: []byte{},
+			IncompleteLog: []byte(`# Time: 2023-05-12T08:00:06.279095Z
+# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     7
+# Query_time: 0.000077  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 1
+SET timestamp=1683878406;
+SELECT 1;`),
+		},
+	}
+
+	for _, splitLog := range splitLogs {
+		completeLog, incompleteLog := SplitSlowLog(splitLog.Log)
+		assert.Equal(t, string(splitLog.CompleteLog), string(completeLog))
+		assert.Equal(t, string(splitLog.IncompleteLog), string(incompleteLog))
+	}
+}

@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -38,6 +37,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/rds"
 	"github.com/shatteredsilicon/ssm/proto"
@@ -61,7 +61,6 @@ var (
 			"Binlog Dump GTID": true,
 		},
 	}
-	logHeaderRe = regexp.MustCompile(`^#\s+[A-Z]`)
 )
 
 type WorkerFactory interface {
@@ -437,7 +436,7 @@ EVENT_LOOP:
 				data.WriteString(*dataOutput.LogFileData)
 			}
 
-			completeLog, incompleteLog := splitLog(data.Bytes())
+			completeLog, incompleteLog := util.SplitSlowLog(data.Bytes())
 			// Test the incomplete log see if it can be parsed
 			p := w.MakeLogParser([]byte(incompleteLog), logParserOpts)
 			isComplete := false
@@ -613,32 +612,4 @@ func intValue(v *int) int {
 		return *v
 	}
 	return 0
-}
-
-func splitLog(log []byte) (complete, incomplete []byte) {
-	lineEnd := len(log)
-	var inHeader bool
-	for i := len(log) - 1; i >= 0; i-- {
-		if log[i] != '\n' {
-			continue
-		}
-
-		if i == lineEnd-1 {
-			continue
-		}
-
-		line := log[i+1 : lineEnd]
-		lineLen := uint64(len(line))
-		if lineLen >= 20 && (line[0] == '/' && string(line[lineLen-6:lineLen]) == "with:\n") {
-			return log[0 : i+1], log[i+1:]
-		} else if logHeaderRe.Match(line) {
-			inHeader = true
-		} else if inHeader {
-			return log[0:lineEnd], log[lineEnd:]
-		}
-
-		lineEnd = i + 1
-	}
-
-	return []byte{}, log
 }
