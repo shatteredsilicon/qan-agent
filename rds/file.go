@@ -22,7 +22,9 @@ func (f ByFileName) Less(i, j int) bool {
 		return false
 	}
 
-	if f[i] != nil && f[i].LogFileName != nil && *f[i].LogFileName < *f[j].LogFileName {
+	if f[i] != nil && f[i].LogFileName != nil &&
+		(len(*f[i].LogFileName) < len(*f[j].LogFileName) ||
+			*f[i].LogFileName < *f[j].LogFileName) {
 		return true
 	}
 
