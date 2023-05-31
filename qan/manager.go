@@ -250,6 +250,13 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 	case "GetConfig":
 		config, errs := m.GetConfig()
 		return cmd.Reply(config, errs...)
+	case "GetMessages":
+		uuid := string(cmd.Data)
+		analyzer, ok := m.analyzers[uuid]
+		if !ok || analyzer.analyzer == nil {
+			return cmd.Reply([]proto.Message{}, nil)
+		}
+		return cmd.Reply(analyzer.analyzer.Messages(), nil)
 	default:
 		return cmd.Reply(nil, pct.UnknownCmdError{Cmd: cmd.Cmd})
 	}
@@ -289,9 +296,9 @@ func (m *Manager) GetDefaults(uuid string) map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-/////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////
 // Implementation
-/////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////
 func (m *Manager) restartAnalyzer(setConfig pc.QAN) error {
 	// XXX Assume caller has locked m.mux.
 

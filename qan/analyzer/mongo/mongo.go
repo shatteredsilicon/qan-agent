@@ -147,6 +147,10 @@ func (m *MongoAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 	}
 }
 
+func (m *MongoAnalyzer) Messages() []proto.Message {
+	return []proto.Message{}
+}
+
 // String returns human readable identification of Analyzer
 func (m *MongoAnalyzer) String() string {
 	return ""

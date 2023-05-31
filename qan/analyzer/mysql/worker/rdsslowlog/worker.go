@@ -22,7 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,15 +34,24 @@ import (
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
+	mysqlEvent "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/rds"
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"go4.org/sort"
+)
+
+const (
+	safeGapToNextHour     = time.Minute
+	maxFileRecords        = 24 * 30 // 30 days
+	longQueryTimeMultiple = 2
+	rateLmitMaximumTimes  = 2
+	minimumLongQueryTime  = 0.001
 )
 
 var (
@@ -61,7 +70,6 @@ var (
 			"Binlog Dump GTID": true,
 		},
 	}
-	logHeaderRe = regexp.MustCompile(`^#\s+[A-Z]`)
 )
 
 type WorkerFactory interface {
@@ -99,7 +107,18 @@ func (j *Job) String() string {
 type fileRecord struct {
 	marker       *string
 	previousData []byte
-	filename     *string
+}
+
+type byFileName []string
+
+func (f byFileName) Len() int      { return len(f) }
+func (f byFileName) Swap(i, j int) { f[i], f[j] = f[j], f[i] }
+func (f byFileName) Less(i, j int) bool {
+	if len(f[i]) < len(f[j]) || f[i] < f[j] {
+		return true
+	}
+
+	return false
 }
 
 type Worker struct {
@@ -110,22 +129,25 @@ type Worker struct {
 	// --
 	ZeroRunTime bool // testing
 	// --
-	name            string
-	status          *pct.Status
-	queryChan       chan string
-	fingerprintChan chan string
-	errChan         chan interface{}
-	doneChan        chan bool
-	oldSlowLogs     map[int]string
-	job             *Job
-	sync            *pct.SyncChan
-	running         bool
-	logParser       log.LogParser
-	utcOffset       time.Duration
-	outlierTime     float64
-	LastWritten     *int64
-	fileRecords     [2]fileRecord
-	resultChan      chan *report.Result
+	name                   string
+	status                 *pct.Status
+	queryChan              chan string
+	fingerprintChan        chan string
+	errChan                chan interface{}
+	doneChan               chan bool
+	oldSlowLogs            map[int]string
+	job                    *Job
+	sync                   *pct.SyncChan
+	running                bool
+	logParser              log.LogParser
+	utcOffset              time.Duration
+	outlierTime            float64
+	LastWritten            *int64
+	fileRecords            map[string]*fileRecord
+	resultChan             chan *report.Result
+	ignoreRateLimit        bool        // wether to ignore rate limit error or not
+	rateLimitLongQueryTime float64     // stores the long_query_time value at the moment that rate limit happened
+	rateLimitTimestamps    []time.Time // stores the timestamps when the historical rate limit happened
 }
 
 func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector) *Worker {
@@ -165,7 +187,7 @@ func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector) *Wo
 		sync:            pct.NewSyncChan(),
 		utcOffset:       utcOffset,
 		outlierTime:     outlierTime.Float64,
-		fileRecords:     [2]fileRecord{},
+		fileRecords:     make(map[string]*fileRecord),
 	}
 	return w
 }
@@ -273,6 +295,29 @@ func (w *Worker) Run() (*report.Result, error) {
 		return nil, ErrUnknownRDSLogOutput
 	}
 
+	longQueryTime, err := w.rds.GetParam("long_query_time")
+	if err != nil {
+		return nil, err
+	}
+	if longQueryTime.ParameterValue == nil {
+		w.logger.Warn("Got an empty long_query_time value")
+		w.ignoreRateLimit = true
+	} else {
+		lqt, err := strconv.ParseFloat(*longQueryTime.ParameterValue, 64)
+		if err != nil {
+			w.logger.Warn("Got an invalid long_query_time value: ", *longQueryTime.ParameterValue)
+			w.ignoreRateLimit = true
+		} else {
+			w.ignoreRateLimit = false
+			if !w.hasRateLimitAlert() {
+				w.rateLimitLongQueryTime = lqt
+			} else if lqt >= w.adviceLongQueryTime() {
+				w.rateLimitLongQueryTime = lqt
+				w.rateLimitTimestamps = []time.Time{}
+			}
+		}
+	}
+
 	var result *report.Result
 	switch *logOutput.ParameterValue {
 	case rds.FILEParamValue:
@@ -344,15 +389,53 @@ func (w *Worker) fingerprinter() {
 	}
 }
 
+func (w *Worker) cleanFileRecords(currentLogFile string) {
+	if len(w.fileRecords) < maxFileRecords {
+		return
+	}
+
+	filenames := make([]string, 0)
+	for filename := range w.fileRecords {
+		if filename == currentLogFile {
+			continue
+		}
+
+		filenames = append(filenames, filename)
+	}
+
+	sort.Sort(byFileName(filenames))
+	for i := 0; i < len(w.fileRecords)-maxFileRecords; i++ {
+		delete(w.fileRecords, filenames[i])
+	}
+}
+
+// orderFiles sorts slow query log file by filename ASC, meaning from
+// the oldest to the latest, and it puts the current slow query log file
+// to the end of the slice that is going to be returned
+func (w *Worker) orderFiles(currentLogFile string, files []*awsRDS.DescribeDBLogFilesDetails) []*awsRDS.DescribeDBLogFilesDetails {
+	sort.Sort(rds.ByFileName(files))
+	if len(files) > 1 && *files[0].LogFileName == currentLogFile {
+		files = append(files[1:], files[0])
+	}
+
+	return files
+}
+
 func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
+	defer w.cleanFileRecords(rdsLogFilePath)
+
 	stopped := false
 
-	now := time.Now().UnixNano() / int64(time.Millisecond) // millisecond
+	now := time.Now().UTC().UnixMilli()
 	if w.LastWritten == nil || *w.LastWritten == 0 {
 		w.LastWritten = &now
+		return nil, stopped, nil
 	}
 
 	baseName := filepath.Base(rdsLogFilePath)
+	firstLastWritten := time.UnixMilli(*w.LastWritten)
+	flwY, flwM, flwD, flwH := firstLastWritten.Year(), firstLastWritten.Month(),
+		firstLastWritten.Day(), firstLastWritten.Hour()
 	files, err := w.rds.GetSlowQueryLogFiles(w.LastWritten, &baseName)
 	if err != nil {
 		w.logger.Error(fmt.Sprintf("fetching rds log files failed: %+v", err))
@@ -364,26 +447,15 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 		return nil, stopped, err
 	}
 
-	// find out the current and last rotated files
-	sort.Sort(rds.ByFileName(files))
-	var currentFile, rotatedFile *awsRDS.DescribeDBLogFilesDetails
-	if *files[0].LogFileName == rdsLogFilePath {
-		currentFile = files[0]
-		if len(files) > 1 {
-			rotatedFile = files[len(files)-1]
+	files = w.orderFiles(rdsLogFilePath, files)
+	for _, file := range files {
+		currentRecord, currentRecordExists := w.fileRecords[rdsLogFilePath]
+		_, fileRecordExists := w.fileRecords[*file.LogFileName]
+		if !fileRecordExists && currentRecordExists {
+			// A new rotated log file appears, transfer the record
+			w.fileRecords[*file.LogFileName] = currentRecord
+			w.fileRecords[rdsLogFilePath] = nil
 		}
-	} else {
-		rotatedFile = files[len(files)-1]
-	}
-
-	// rotation changes
-	if rotatedFile != nil && (w.fileRecords[1].filename == nil || *rotatedFile.LogFileName != *w.fileRecords[1].filename) {
-		w.fileRecords[1].filename = rotatedFile.LogFileName
-		w.fileRecords[1].marker = w.fileRecords[0].marker
-		w.fileRecords[1].previousData = w.fileRecords[0].previousData
-		zeroMarker := rds.ZeroMarker
-		w.fileRecords[0].marker = &zeroMarker
-		w.fileRecords[0].previousData = []byte{}
 	}
 
 	runFingerPrinter := func() {
@@ -404,28 +476,65 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 	defer func() { w.doneChan <- true }()
 
 EVENT_LOOP:
-	for i, file := range []*awsRDS.DescribeDBLogFilesDetails{currentFile, rotatedFile} {
+	for _, file := range files {
 		if file == nil {
 			continue
 		}
 
-		record := w.fileRecords[i]
+		if record, ok := w.fileRecords[*file.LogFileName]; !ok || record == nil {
+			zeroMarker := rds.ZeroMarker
+			w.fileRecords[*file.LogFileName] = &fileRecord{
+				previousData: []byte{},
+				marker:       &zeroMarker,
+			}
+		}
+		record := w.fileRecords[*file.LogFileName]
 		for {
+			// check if current log file got rotated or
+			// is going to be rotated
+			if *file.LogFileName == rdsLogFilePath {
+				tmpNow := time.Now().UTC()
+				y, m, d, h := tmpNow.Year(), tmpNow.Month(), tmpNow.Day(), tmpNow.Hour()
+				if flwY != y || flwM != m || flwD != d || flwH != h {
+					// current log file must be rotated while we're parsing the old files,
+					// leave it to the next turn
+					break
+				}
+				nextHour := time.Date(y, m, d, h, 0, 0, 0, time.UTC).Add(time.Hour)
+				if nextHour.Sub(tmpNow) < safeGapToNextHour {
+					// current log file is going to be rotated soon, we leave it to the
+					// next turn incase it got rotated while we are fetching the data
+					break
+				}
+			}
+
 			numberOfLines := rds.DefaultNumberOfLines
 			dataOutput, err := w.rds.DownloadDBLogFilePortion(file.LogFileName, record.marker, &numberOfLines)
 			if err != nil {
-				if awsErr, ok := err.(awserr.Error); ok {
-					if awsErr.Code() == awsRDS.ErrCodeDBLogFileNotFoundFault {
-						break
-					}
+				w.logger.Error(fmt.Sprintf("downloading rds log file %s failed: %+v", *file.LogFileName, err))
+
+				awsErr, ok := err.(awserr.Error)
+				if !ok || w.ignoreRateLimit || w.hasRateLimitAlert() {
+					break
 				}
 
-				w.logger.Error(fmt.Sprintf("downloading rds log file %s failed: %+v", *file.LogFileName, err))
-				break
-			}
+				// check if it's a throttling error
+				messages := strings.ToLower(awsErr.Message())
+				if !strings.Contains(messages, "rate exceed") && !strings.Contains(messages, "quota exceed") {
+					break
+				}
 
-			if record.marker == nil {
-				record.marker = dataOutput.Marker
+				now := time.Now().UTC()
+				y, m, d := now.Date()
+				if len(w.rateLimitTimestamps) > 0 &&
+					(w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Year() != y ||
+						w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Month() != m ||
+						w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Day() != d) {
+					// re-initialize if the rate limit timestamps are not in the same day
+					w.rateLimitTimestamps = []time.Time{}
+				}
+
+				w.rateLimitTimestamps = append(w.rateLimitTimestamps, now)
 				break
 			}
 
@@ -437,10 +546,9 @@ EVENT_LOOP:
 				data.WriteString(*dataOutput.LogFileData)
 			}
 
-			completeLog, incompleteLog := splitLog(data.Bytes())
+			completeLog, incompleteLog := util.SplitSlowLog(data.Bytes())
 			// Test the incomplete log see if it can be parsed
 			p := w.MakeLogParser([]byte(incompleteLog), logParserOpts)
-			isComplete := false
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
@@ -452,18 +560,14 @@ EVENT_LOOP:
 					w.logger.Debug("Check if incomplete log is complete failed: ", err)
 				}
 			}()
-			for event := range p.EventChan() {
-				if event != nil && len(event.Query) > 0 {
-					isComplete = true
-				}
-				p.Stop()
-				break
-			}
-			if isComplete {
+
+			event := <-p.EventChan()
+			if event != nil && len(event.Query) > 0 {
 				completeLog = append(completeLog, incompleteLog...)
 			} else {
 				record.previousData = incompleteLog
 			}
+			p.Stop()
 
 			// Create a slow log parser and run it.  It sends log.Event via its channel.
 			// Be sure to stop it when done, else we'll leak goroutines.
@@ -489,8 +593,20 @@ EVENT_LOOP:
 
 			// Make an event aggregate to do all the heavy lifting: fingerprint
 			// queries, group, and aggregate.
-			aggregator := event.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
+			aggregator := mysqlEvent.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
 			for event := range p.EventChan() {
+				lastWritten := event.Ts.UnixMilli()
+				if event.Ts.IsZero() {
+					// Have to set it to NOW()
+					lastWritten = time.Now().UnixMilli()
+				}
+				w.LastWritten = &lastWritten
+
+				if qTime, ok := event.TimeMetrics["Query_time"]; !ok || qTime == 0 {
+					// ignore log entry that has 0 Query_time
+					continue
+				}
+
 				if record.marker != nil {
 					w.status.Update(w.name, fmt.Sprintf("Parsing rds slow log file %s, marker %s", *file.LogFileName, *record.marker))
 				} else {
@@ -568,7 +684,7 @@ EVENT_LOOP:
 			// The aggregator result is a map, but we need an array of classes for
 			// the query report, so convert it.
 			n := len(r.Class)
-			classes := make([]*event.Class, n)
+			classes := make([]*mysqlEvent.Class, n)
 			for _, class := range r.Class {
 				n-- // can't classes[--n] in Go
 				classes[n] = class
@@ -587,14 +703,35 @@ EVENT_LOOP:
 				break
 			}
 		}
-
-		w.fileRecords[i] = record
 	}
 
-	if !stopped {
-		w.LastWritten = &now
-	}
 	return nil, stopped, nil
+}
+
+func (w Worker) adviceLongQueryTime() float64 {
+	if w.rateLimitLongQueryTime < minimumLongQueryTime {
+		return minimumLongQueryTime
+	} else {
+		return w.rateLimitLongQueryTime * 2
+	}
+}
+
+// Messages returns all messages in response to Messages command
+func (w Worker) Messages() []proto.Message {
+	if w.hasRateLimitAlert() {
+		adviceLongQueryTime := w.adviceLongQueryTime()
+		return []proto.Message{
+			{
+				Content: fmt.Sprintf("we have encountered log harvesting throttling, the long_query_time was %s, please increase to %s", strconv.FormatFloat(w.rateLimitLongQueryTime, 'f', -1, 64), strconv.FormatFloat(adviceLongQueryTime, 'f', -1, 64)),
+			},
+		}
+	}
+
+	return []proto.Message{}
+}
+
+func (w Worker) hasRateLimitAlert() bool {
+	return len(w.rateLimitTimestamps) >= rateLmitMaximumTimes
 }
 
 // boolValue returns the value of the bool pointer passed in or
@@ -613,32 +750,4 @@ func intValue(v *int) int {
 		return *v
 	}
 	return 0
-}
-
-func splitLog(log []byte) (complete, incomplete []byte) {
-	lineEnd := len(log)
-	var inHeader bool
-	for i := len(log) - 1; i >= 0; i-- {
-		if log[i] != '\n' {
-			continue
-		}
-
-		if i == lineEnd-1 {
-			continue
-		}
-
-		line := log[i+1 : lineEnd]
-		lineLen := uint64(len(line))
-		if lineLen >= 20 && (line[0] == '/' && string(line[lineLen-6:lineLen]) == "with:\n") {
-			return log[0 : i+1], log[i+1:]
-		} else if logHeaderRe.Match(line) {
-			inHeader = true
-		} else if inHeader {
-			return log[0:lineEnd], log[lineEnd:]
-		}
-
-		lineEnd = i + 1
-	}
-
-	return []byte{}, log
 }

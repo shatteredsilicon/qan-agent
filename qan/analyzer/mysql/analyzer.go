@@ -31,6 +31,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/rdsslowlog"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/ticker"
 	"github.com/shatteredsilicon/ssm/proto"
@@ -154,6 +155,19 @@ func (a *RealAnalyzer) SetConfig(config pc.QAN) {
 
 func (m *RealAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 	return map[string]interface{}{}
+}
+
+// Messages returns all messages in response to Messages command
+func (a *RealAnalyzer) Messages() []proto.Message {
+	if a.worker == nil {
+		return []proto.Message{}
+	}
+
+	if worker, ok := a.worker.(*rdsslowlog.Worker); ok {
+		return worker.Messages()
+	}
+
+	return []proto.Message{}
 }
 
 // --------------------------------------------------------------------------

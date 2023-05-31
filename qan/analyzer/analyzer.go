@@ -47,4 +47,6 @@ type Analyzer interface {
 	GetDefaults(uuid string) map[string]interface{}
 	// String returns human readable identification of Analyzer
 	String() string
+	// Messages returns necessary messages
+	Messages() []proto.Message
 }
