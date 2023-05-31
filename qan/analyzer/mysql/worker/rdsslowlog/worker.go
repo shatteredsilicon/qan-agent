@@ -722,7 +722,7 @@ func (w Worker) Messages() []proto.Message {
 		adviceLongQueryTime := w.adviceLongQueryTime()
 		return []proto.Message{
 			{
-				Content: fmt.Sprintf("we have encountered log harvesting throttling, the long_query_time was %s, please increase to %s", strconv.FormatFloat(w.rateLimitLongQueryTime, 'f', -1, 64), strconv.FormatFloat(adviceLongQueryTime, 'f', -1, 64)),
+				Content: fmt.Sprintf("Throttling encountered while harvesting slow query log. Current long_query_time = %s, consider increasing to %s", strconv.FormatFloat(w.rateLimitLongQueryTime, 'f', -1, 64), strconv.FormatFloat(adviceLongQueryTime, 'f', -1, 64)),
 			},
 		}
 	}
