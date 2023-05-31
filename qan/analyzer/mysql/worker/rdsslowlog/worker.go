@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,8 +47,11 @@ import (
 )
 
 const (
-	safeGapToNextHour = time.Minute
-	maxFileRecords    = 24 * 30 // 30 days
+	safeGapToNextHour     = time.Minute
+	maxFileRecords        = 24 * 30 // 30 days
+	longQueryTimeMultiple = 2
+	rateLmitMaximumTimes  = 2
+	minimumLongQueryTime  = 0.001
 )
 
 var (
@@ -125,22 +129,25 @@ type Worker struct {
 	// --
 	ZeroRunTime bool // testing
 	// --
-	name            string
-	status          *pct.Status
-	queryChan       chan string
-	fingerprintChan chan string
-	errChan         chan interface{}
-	doneChan        chan bool
-	oldSlowLogs     map[int]string
-	job             *Job
-	sync            *pct.SyncChan
-	running         bool
-	logParser       log.LogParser
-	utcOffset       time.Duration
-	outlierTime     float64
-	LastWritten     *int64
-	fileRecords     map[string]*fileRecord
-	resultChan      chan *report.Result
+	name                   string
+	status                 *pct.Status
+	queryChan              chan string
+	fingerprintChan        chan string
+	errChan                chan interface{}
+	doneChan               chan bool
+	oldSlowLogs            map[int]string
+	job                    *Job
+	sync                   *pct.SyncChan
+	running                bool
+	logParser              log.LogParser
+	utcOffset              time.Duration
+	outlierTime            float64
+	LastWritten            *int64
+	fileRecords            map[string]*fileRecord
+	resultChan             chan *report.Result
+	ignoreRateLimit        bool        // wether to ignore rate limit error or not
+	rateLimitLongQueryTime float64     // stores the long_query_time value at the moment that rate limit happened
+	rateLimitTimestamps    []time.Time // stores the timestamps when the historical rate limit happened
 }
 
 func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector) *Worker {
@@ -286,6 +293,29 @@ func (w *Worker) Run() (*report.Result, error) {
 	}
 	if logOutput.ParameterValue == nil {
 		return nil, ErrUnknownRDSLogOutput
+	}
+
+	longQueryTime, err := w.rds.GetParam("long_query_time")
+	if err != nil {
+		return nil, err
+	}
+	if longQueryTime.ParameterValue == nil {
+		w.logger.Warn("Got an empty long_query_time value")
+		w.ignoreRateLimit = true
+	} else {
+		lqt, err := strconv.ParseFloat(*longQueryTime.ParameterValue, 64)
+		if err != nil {
+			w.logger.Warn("Got an invalid long_query_time value: ", *longQueryTime.ParameterValue)
+			w.ignoreRateLimit = true
+		} else {
+			w.ignoreRateLimit = false
+			if !w.hasRateLimitAlert() {
+				w.rateLimitLongQueryTime = lqt
+			} else if lqt >= w.adviceLongQueryTime() {
+				w.rateLimitLongQueryTime = lqt
+				w.rateLimitTimestamps = []time.Time{}
+			}
+		}
 	}
 
 	var result *report.Result
@@ -481,13 +511,30 @@ EVENT_LOOP:
 			numberOfLines := rds.DefaultNumberOfLines
 			dataOutput, err := w.rds.DownloadDBLogFilePortion(file.LogFileName, record.marker, &numberOfLines)
 			if err != nil {
-				if awsErr, ok := err.(awserr.Error); ok {
-					if awsErr.Code() == awsRDS.ErrCodeDBLogFileNotFoundFault {
-						break
-					}
+				w.logger.Error(fmt.Sprintf("downloading rds log file %s failed: %+v", *file.LogFileName, err))
+
+				awsErr, ok := err.(awserr.Error)
+				if !ok || w.ignoreRateLimit || w.hasRateLimitAlert() {
+					break
 				}
 
-				w.logger.Error(fmt.Sprintf("downloading rds log file %s failed: %+v", *file.LogFileName, err))
+				// check if it's a throttling error
+				messages := strings.ToLower(awsErr.Message())
+				if !strings.Contains(messages, "rate exceed") && !strings.Contains(messages, "quota exceed") {
+					break
+				}
+
+				now := time.Now().UTC()
+				y, m, d := now.Date()
+				if len(w.rateLimitTimestamps) > 0 &&
+					(w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Year() != y ||
+						w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Month() != m ||
+						w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Day() != d) {
+					// re-initialize if the rate limit timestamps are not in the same day
+					w.rateLimitTimestamps = []time.Time{}
+				}
+
+				w.rateLimitTimestamps = append(w.rateLimitTimestamps, now)
 				break
 			}
 
@@ -659,6 +706,32 @@ EVENT_LOOP:
 	}
 
 	return nil, stopped, nil
+}
+
+func (w Worker) adviceLongQueryTime() float64 {
+	if w.rateLimitLongQueryTime < minimumLongQueryTime {
+		return minimumLongQueryTime
+	} else {
+		return w.rateLimitLongQueryTime * 2
+	}
+}
+
+// Messages returns all messages in response to Messages command
+func (w Worker) Messages() []proto.Message {
+	if w.hasRateLimitAlert() {
+		adviceLongQueryTime := w.adviceLongQueryTime()
+		return []proto.Message{
+			{
+				Content: fmt.Sprintf("we have encountered log harvesting throttling, the long_query_time was %s, please increase to %s", strconv.FormatFloat(w.rateLimitLongQueryTime, 'f', -1, 64), strconv.FormatFloat(adviceLongQueryTime, 'f', -1, 64)),
+			},
+		}
+	}
+
+	return []proto.Message{}
+}
+
+func (w Worker) hasRateLimitAlert() bool {
+	return len(w.rateLimitTimestamps) >= rateLmitMaximumTimes
 }
 
 // boolValue returns the value of the bool pointer passed in or

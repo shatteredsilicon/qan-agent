@@ -88,6 +88,10 @@ func (a *QanAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 	return a.Defaults
 }
 
+func (a *QanAnalyzer) Messages() []proto.Message {
+	return []proto.Message{}
+}
+
 // --------------------------------------------------------------------------
 
 func (a *QanAnalyzer) crashOrError() error {

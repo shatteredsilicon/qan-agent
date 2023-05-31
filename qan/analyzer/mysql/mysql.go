@@ -221,3 +221,8 @@ func (m *MySQLAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 func (m *MySQLAnalyzer) String() string {
 	return m.analyzer.String()
 }
+
+// Messages returns all messages in response to Messages command
+func (m *MySQLAnalyzer) Messages() []proto.Message {
+	return m.analyzer.Messages()
+}
