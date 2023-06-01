@@ -111,12 +111,10 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 	}
 }
 
-// AddClass adds a Class to the current class. This is used with Performance
-// Schema which returns pre-aggregated classes instead of events.
+// AddClass adds a Class to the current class. This is used with pre-aggregated classes.
 func (c *Class) AddClass(newClass *Class) {
 	c.UniqueQueries++
 	c.TotalQueries += newClass.TotalQueries
-	c.Example = nil
 
 	for newMetric, newStats := range newClass.Metrics.TimeMetrics {
 		stats, ok := c.Metrics.TimeMetrics[newMetric]
