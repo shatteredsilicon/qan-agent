@@ -468,7 +468,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 		}()
 
 		makeReport := func(t0, t1 time.Time, result *report.Result) {
-			rep := report.MakeReport(a.config, t0, t1, interval, result)
+			rep := report.MakeReport(a.config, t0, t1, interval, result, a.logger)
 			if err := a.spool.Write("qan", rep); err != nil {
 				a.logger.Warn("Lost report:", err)
 			}
@@ -517,7 +517,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 
 		// Translate the results into a report and spool.
 		// NOTE: "qan" here is correct; do not use a.name.
-		report := report.MakeReport(a.config, interval.StartTime, interval.StopTime, interval, result)
+		report := report.MakeReport(a.config, interval.StartTime, interval.StopTime, interval, result, a.logger)
 		if err := a.spool.Write("qan", report); err != nil {
 			a.logger.Warn("Lost report:", err)
 		}

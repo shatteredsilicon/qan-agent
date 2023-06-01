@@ -225,7 +225,7 @@ func (self *Aggregator) interval(ts time.Time) *qan.Report {
 	result := self.createResult()
 
 	// translate result into report and return it
-	return report.MakeReport(self.config, self.timeStart, self.timeEnd, nil, result)
+	return report.MakeReport(self.config, self.timeStart, self.timeEnd, nil, result, nil)
 }
 
 // TimeStart returns start time for current interval

@@ -78,6 +78,9 @@ func (m *Manager) Start() error {
 
 	// Start relay (it buffers and sends log entries to API).
 	level := proto.LogLevelNumber[config.Level]
+	if os.Getenv("DEBUG") == "1" || os.Getenv("DEBUG") == "true" {
+		level = proto.LOG_DEBUG
+	}
 	m.relay = NewRelay(m.client, m.logChan, level, pct.ToBool(config.Offline))
 	go m.relay.Run()
 
