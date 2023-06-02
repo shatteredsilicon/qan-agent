@@ -18,6 +18,7 @@
 package report
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 	"time"
@@ -52,7 +53,7 @@ func (a ByQueryTime) Less(i, j int) bool {
 	return a[i].Metrics.TimeMetrics["Query_time"].Sum > a[j].Metrics.TimeMetrics["Query_time"].Sum
 }
 
-func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Interval, result *Result) *qan.Report {
+func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Interval, result *Result, logger *pct.Logger) *qan.Report {
 	// Sort classes by Query_time_sum, descending.
 	sort.Sort(ByQueryTime(result.Class))
 
@@ -67,6 +68,10 @@ func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Inte
 	}
 	for i := range result.Class {
 		report.Class[i] = result.Class[i].Class
+		if logger != nil && report.Class[i] != nil && report.Class[i].Fingerprint != "" && report.Class[i].Example != nil && report.Class[i].Example.Query == "" {
+			classBytes, _ := json.Marshal(*report.Class[i])
+			logger.Debug("MakeReport got an non-empty fingerprint and empty query example class: %s", string(classBytes))
+		}
 	}
 	if interval != nil {
 		size, err := pct.FileSize(interval.Filename)

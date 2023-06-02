@@ -516,7 +516,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 }
 
 /*
-  This test uses a real MySQL connection because we need to test if the slow log
+This test uses a real MySQL connection because we need to test if the slow log
 is being created when it is rotated.
 */
 func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
@@ -790,7 +790,7 @@ func (s *WorkerTestSuite) TestResult014(t *C) {
 		StartOffset: 0,
 		EndOffset:   127118680,
 	}
-	report := report.MakeReport(config, interval.StartTime, interval.StopTime, interval, result)
+	report := report.MakeReport(config, interval.StartTime, interval.StopTime, interval, result, nil)
 
 	t.Check(report.Global.TotalQueries, Equals, uint(4))
 	t.Check(report.Global.UniqueQueries, Equals, uint(4))
