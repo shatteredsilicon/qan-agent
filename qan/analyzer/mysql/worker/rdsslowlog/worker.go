@@ -426,16 +426,15 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 
 	stopped := false
 
-	now := time.Now().UTC().UnixMilli()
+	startTime := time.Now().UTC()
+	stY, stM, stD, stH := startTime.Year(), startTime.Month(), startTime.Day(), startTime.Hour()
 	if w.LastWritten == nil || *w.LastWritten == 0 {
-		w.LastWritten = &now
+		startTimeMilli := startTime.UnixMilli()
+		w.LastWritten = &startTimeMilli
 		return nil, stopped, nil
 	}
 
 	baseName := filepath.Base(rdsLogFilePath)
-	firstLastWritten := time.UnixMilli(*w.LastWritten)
-	flwY, flwM, flwD, flwH := firstLastWritten.Year(), firstLastWritten.Month(),
-		firstLastWritten.Day(), firstLastWritten.Hour()
 	files, err := w.rds.GetSlowQueryLogFiles(w.LastWritten, &baseName)
 	if err != nil {
 		w.logger.Error(fmt.Sprintf("fetching rds log files failed: %+v", err))
@@ -443,7 +442,8 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 	}
 
 	if len(files) == 0 {
-		w.LastWritten = &now
+		startTimeMilli := startTime.UnixMilli()
+		w.LastWritten = &startTimeMilli
 		return nil, stopped, err
 	}
 
@@ -495,15 +495,17 @@ EVENT_LOOP:
 			if *file.LogFileName == rdsLogFilePath {
 				tmpNow := time.Now().UTC()
 				y, m, d, h := tmpNow.Year(), tmpNow.Month(), tmpNow.Day(), tmpNow.Hour()
-				if flwY != y || flwM != m || flwD != d || flwH != h {
+				if stY != y || stM != m || stD != d || stH != h {
 					// current log file must be rotated while we're parsing the old files,
 					// leave it to the next turn
+					w.logger.Debug(fmt.Sprintf("Log parsing for current slow log file cancelled for this turn, because log file rotation happened during the parsing. startTime: %v, currentTime: %v", startTime, tmpNow))
 					break
 				}
 				nextHour := time.Date(y, m, d, h, 0, 0, 0, time.UTC).Add(time.Hour)
 				if nextHour.Sub(tmpNow) < safeGapToNextHour {
 					// current log file is going to be rotated soon, we leave it to the
 					// next turn incase it got rotated while we are fetching the data
+					w.logger.Debug(fmt.Sprintf("Log parsing for current slow log file cancelled for this turn, because log file rotation is going to happen. currentTime: %v, nextHourTime: %v", tmpNow, nextHour))
 					break
 				}
 			}
