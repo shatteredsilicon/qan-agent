@@ -414,7 +414,7 @@ func (w *Worker) cleanFileRecords(currentLogFile string) {
 // to the end of the slice that is going to be returned
 func (w *Worker) orderFiles(currentLogFile string, files []*awsRDS.DescribeDBLogFilesDetails) []*awsRDS.DescribeDBLogFilesDetails {
 	sort.Sort(rds.ByFileName(files))
-	if len(files) > 1 && *files[0].LogFileName == currentLogFile {
+	if len(files) > 1 && filepath.Base(*files[0].LogFileName) == currentLogFile {
 		files = append(files[1:], files[0])
 	}
 
@@ -422,6 +422,7 @@ func (w *Worker) orderFiles(currentLogFile string, files []*awsRDS.DescribeDBLog
 }
 
 func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
+	currentLogFile := filepath.Base(rdsLogFilePath)
 	defer w.cleanFileRecords(rdsLogFilePath)
 
 	stopped := false
@@ -434,8 +435,7 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 		return nil, stopped, nil
 	}
 
-	baseName := filepath.Base(rdsLogFilePath)
-	files, err := w.rds.GetSlowQueryLogFiles(w.LastWritten, &baseName)
+	files, err := w.rds.GetSlowQueryLogFiles(w.LastWritten, &currentLogFile)
 	if err != nil {
 		w.logger.Error(fmt.Sprintf("fetching rds log files failed: %+v", err))
 		return nil, stopped, err
@@ -447,14 +447,15 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 		return nil, stopped, err
 	}
 
-	files = w.orderFiles(rdsLogFilePath, files)
+	files = w.orderFiles(currentLogFile, files)
 	for _, file := range files {
-		currentRecord, currentRecordExists := w.fileRecords[rdsLogFilePath]
-		_, fileRecordExists := w.fileRecords[*file.LogFileName]
+		filename := filepath.Base(*file.LogFileName)
+		currentRecord, currentRecordExists := w.fileRecords[currentLogFile]
+		_, fileRecordExists := w.fileRecords[filename]
 		if !fileRecordExists && currentRecordExists {
 			// A new rotated log file appears, transfer the record
-			w.fileRecords[*file.LogFileName] = currentRecord
-			w.fileRecords[rdsLogFilePath] = nil
+			w.fileRecords[filename] = currentRecord
+			w.fileRecords[currentLogFile] = nil
 		}
 	}
 
@@ -481,18 +482,19 @@ EVENT_LOOP:
 			continue
 		}
 
-		if record, ok := w.fileRecords[*file.LogFileName]; !ok || record == nil {
+		filename := filepath.Base(*file.LogFileName)
+		if record, ok := w.fileRecords[filename]; !ok || record == nil {
 			zeroMarker := rds.ZeroMarker
-			w.fileRecords[*file.LogFileName] = &fileRecord{
+			w.fileRecords[filename] = &fileRecord{
 				previousData: []byte{},
 				marker:       &zeroMarker,
 			}
 		}
-		record := w.fileRecords[*file.LogFileName]
+		record := w.fileRecords[filename]
 		for {
 			// check if current log file got rotated or
 			// is going to be rotated
-			if *file.LogFileName == rdsLogFilePath {
+			if filename == currentLogFile {
 				tmpNow := time.Now().UTC()
 				y, m, d, h := tmpNow.Year(), tmpNow.Month(), tmpNow.Day(), tmpNow.Hour()
 				if stY != y || stM != m || stD != d || stH != h {
