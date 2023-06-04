@@ -429,6 +429,14 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 
 	startTime := time.Now().UTC()
 	stY, stM, stD, stH := startTime.Year(), startTime.Month(), startTime.Day(), startTime.Hour()
+	lastHour := time.Date(stY, stM, stD, stH, 0, 0, 0, time.UTC)
+	if startTime.Sub(lastHour) < safeGapToNextHour {
+		// log rotation just happened, we wait for next turn,
+		// leave it to aws to make the rotation fully complete
+		w.logger.Debug(fmt.Sprintf("Log parsing for current slow log file cancelled for this turn, because log file rotation just happened. startTime: %v", startTime))
+		return nil, stopped, nil
+	}
+
 	if w.LastWritten == nil || *w.LastWritten == 0 {
 		startTimeMilli := startTime.UnixMilli()
 		w.LastWritten = &startTimeMilli
