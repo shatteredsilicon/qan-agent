@@ -584,7 +584,9 @@ EVENT_LOOP:
 			// Create a slow log parser and run it.  It sends log.Event via its channel.
 			// Be sure to stop it when done, else we'll leak goroutines.
 			p = w.MakeLogParser([]byte(completeLog), logParserOpts)
-			result := &report.Result{}
+			result := &report.Result{
+				StartTime: time.Unix(0, int64(time.Millisecond) * (*w.LastWritten)),
+			}
 			go func() {
 				defer func() {
 					if err := recover(); err != nil {
@@ -607,10 +609,22 @@ EVENT_LOOP:
 			// queries, group, and aggregate.
 			aggregator := mysqlEvent.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
 			for event := range p.EventChan() {
+				// Stop if Stop() called.
+				select {
+				case <-w.sync.StopChan:
+					w.logger.Debug("Run:stop")
+					stopped = true
+					break EVENT_LOOP
+				default:
+				}
+
 				lastWritten := event.Ts.UnixMilli()
 				if event.Ts.IsZero() {
 					// Have to set it to NOW()
 					lastWritten = time.Now().UnixMilli()
+				}
+				if lastWritten < result.StartTime.UnixMilli() {
+					continue
 				}
 				w.LastWritten = &lastWritten
 
@@ -623,15 +637,6 @@ EVENT_LOOP:
 					w.status.Update(w.name, fmt.Sprintf("Parsing rds slow log file %s, marker %s", *file.LogFileName, *record.marker))
 				} else {
 					w.status.Update(w.name, fmt.Sprintf("Parsing rds slow log file %s", *file.LogFileName))
-				}
-
-				// Stop if Stop() called.
-				select {
-				case <-w.sync.StopChan:
-					w.logger.Debug("Run:stop")
-					stopped = true
-					break EVENT_LOOP
-				default:
 				}
 
 				// Stop if rate limits are mixed. This shouldn't happen. If it does,
@@ -703,6 +708,7 @@ EVENT_LOOP:
 			}
 			result.Global = r.Global
 			result.Class = classes
+			result.EndTime = time.Unix(0, int64(time.Millisecond)*(*w.LastWritten))
 			w.resultChan <- result
 
 			record.previousData = []byte{}
