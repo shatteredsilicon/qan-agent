@@ -468,6 +468,9 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 		}()
 
 		makeReport := func(t0, t1 time.Time, result *report.Result) {
+			if t1.Sub(t0).Seconds() < 1 {
+				t1 = t0.Add(time.Second)
+			}
 			rep := report.MakeReport(a.config, t0, t1, interval, result, a.logger)
 			if err := a.spool.Write("qan", rep); err != nil {
 				a.logger.Warn("Lost report:", err)
@@ -490,27 +493,27 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 				continue
 			}
 
-			result = report.MergeResult(result, *res)
+			newResult := *res
+			if res.StartTime.IsZero() || result.StartTime.IsZero() || res.StartTime.Unix() <= result.StartTime.Unix() {
+				result = report.MergeResult(result, *res)
+				newResult = report.Result{}
+			}
 
 			t1 := time.Now()
 			t0, t1 = startEndTime(t0, t1, result)
-			if t1.Sub(t0).Seconds() < 1 {
+			if result.StartTime.IsZero() && t1.Sub(t0).Seconds() < 1 {
 				continue
 			}
 
 			makeReport(t0, t1, &result)
 
-			result = report.Result{}
+			result = newResult
 			t0 = t1
 		}
 
 		if len(result.Class) > 0 {
 			t1 := time.Now()
 			t0, t1 = startEndTime(t0, t1, result)
-			if t1.Sub(t0).Seconds() < 1 {
-				t1 = t0.Add(time.Second)
-			}
-
 			makeReport(t0, t1, &result)
 		}
 	} else {
