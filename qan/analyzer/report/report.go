@@ -41,6 +41,8 @@ type Result struct {
 	RunTime    float64        // seconds parsing data, hopefully < interval
 	StopOffset int64          // slow log offset where parsing stopped, should be <= end offset
 	Error      string         `json:",omitempty"`
+	StartTime time.Time
+	EndTime time.Time
 }
 
 type ByQueryTime []*event.Class
@@ -147,6 +149,13 @@ func MergeResult(destResult, srcResult Result) Result {
 		} else {
 			destResult.Error = srcResult.Error
 		}
+	}
+
+	if destResult.StartTime.IsZero() {
+		destResult.StartTime = srcResult.StartTime
+	}
+	if destResult.EndTime.Before(srcResult.EndTime) {
+		destResult.EndTime = srcResult.EndTime
 	}
 
 	return destResult

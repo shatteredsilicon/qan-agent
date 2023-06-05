@@ -474,6 +474,16 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 			}
 		}
 
+		startEndTime := func(t0 time.Time, t1 time.Time, result report.Result) (time.Time, time.Time) {
+			if !result.StartTime.IsZero() {
+				t0 = result.StartTime
+			}
+			if !result.EndTime.IsZero() {
+				t1 = result.EndTime
+			}
+			return t0, t1
+		}
+
 		result := report.Result{}
 		for res := range resultChan {
 			if res == nil || len(res.Class) == 0 {
@@ -483,6 +493,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 			result = report.MergeResult(result, *res)
 
 			t1 := time.Now()
+			t0, t1 = startEndTime(t0, t1, result)
 			if t1.Sub(t0).Seconds() < 1 {
 				continue
 			}
@@ -495,6 +506,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 
 		if len(result.Class) > 0 {
 			t1 := time.Now()
+			t0, t1 = startEndTime(t0, t1, result)
 			if t1.Sub(t0).Seconds() < 1 {
 				t1 = t0.Add(time.Second)
 			}
