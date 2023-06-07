@@ -41,8 +41,8 @@ type Result struct {
 	RunTime    float64        // seconds parsing data, hopefully < interval
 	StopOffset int64          // slow log offset where parsing stopped, should be <= end offset
 	Error      string         `json:",omitempty"`
-	StartTime time.Time
-	EndTime time.Time
+	StartTime  time.Time
+	EndTime    time.Time
 }
 
 type ByQueryTime []*event.Class
