@@ -122,6 +122,7 @@ func showCreate(c mysql.Connector, dbTable string) (proto.DBObjectType, string, 
 	if err != nil {
 		return tableType, "", err
 	}
+	defer rows.Close()
 
 	if rows.Next() {
 		columns, err := rows.Columns()
@@ -218,6 +219,7 @@ func showStatus(c mysql.Connector, db, table string) (*proto.ShowTableStatus, er
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	if rows.Next() {
 		cols := []interface{}{
