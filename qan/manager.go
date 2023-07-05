@@ -56,10 +56,11 @@ type Manager struct {
 	instanceRepo    *instance.Repo
 	analyzerFactory analyzer.AnalyzerFactory
 	// --
-	mux       *sync.RWMutex
-	running   bool
-	analyzers map[string]AnalyzerInstance
-	status    *pct.Status
+	mux             *sync.RWMutex
+	running         bool
+	analyzers       map[string]AnalyzerInstance
+	status          *pct.Status
+	removeCallbacks [](func(string))
 }
 
 func NewManager(
@@ -72,9 +73,10 @@ func NewManager(
 		instanceRepo:    instanceRepo,
 		analyzerFactory: analyzerFactory,
 		// --
-		mux:       &sync.RWMutex{},
-		analyzers: make(map[string]AnalyzerInstance),
-		status:    pct.NewStatus([]string{pkg}),
+		mux:             &sync.RWMutex{},
+		analyzers:       make(map[string]AnalyzerInstance),
+		status:          pct.NewStatus([]string{pkg}),
+		removeCallbacks: make([]func(string), 0),
 	}
 	return m
 }
@@ -245,6 +247,9 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 		// Remove local, cached instance info so if tool is started again we will
 		// fetch the latest instance info.
 		m.instanceRepo.Remove(uuid)
+		for _, f := range m.removeCallbacks {
+			f(uuid)
+		}
 
 		return cmd.Reply(nil, errs...)
 	case "GetConfig":
@@ -417,4 +422,8 @@ func (m *Manager) stopAnalyzer(uuid string) error {
 
 func configName(uuid string) string {
 	return fmt.Sprintf("%s-%s", pkg, uuid)
+}
+
+func (m *Manager) AddRemoveCallback(f func(string)) {
+	m.removeCallbacks = append(m.removeCallbacks, f)
 }

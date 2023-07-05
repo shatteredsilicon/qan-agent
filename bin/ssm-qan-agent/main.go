@@ -278,6 +278,7 @@ func run(agentConfig *agent.AgentConfig) error {
 	if err := qanManager.Start(); err != nil {
 		return fmt.Errorf("Error starting qan manager: %s", err)
 	}
+	qanManager.AddRemoveCallback(queryManager.RemoveInstance)
 
 	// //////////////////////////////////////////////////////////////////////
 	// Create and start the agent

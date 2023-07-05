@@ -31,6 +31,10 @@ import (
 	"github.com/shatteredsilicon/qan-agent/pct"
 )
 
+const (
+	MaxOpenConns = 4
+)
+
 var (
 	ErrNotConnected = errors.New("not connected")
 )
@@ -102,6 +106,7 @@ func (c *Connection) Connect() error {
 		return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(c.dsn), FormatError(err))
 	}
 
+	db.SetMaxOpenConns(MaxOpenConns)
 	c.conn = db
 	c.connected = true
 	return nil

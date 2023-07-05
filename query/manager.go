@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -135,6 +136,29 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 	}
 
 	return cmd.Reply(data)
+}
+
+func (m *Manager) RemoveInstance(uuid string) {
+	in, err := m.instanceRepo.Get(uuid, false)
+	if err != nil {
+		m.logger.Error(fmt.Printf("queryManager.RemoveInstance gets instance %s failed: %+v", uuid, err))
+		return
+	}
+
+	p, ok := m.plugins[in.Subsystem]
+	if !ok {
+		m.logger.Warn(fmt.Printf("queryManager.RemoveInstance subsystem %s not exists", in.Subsystem))
+		return
+	}
+
+	_, err = p.Handle(&proto.Cmd{
+		Ts:  time.Now(),
+		Cmd: "RemoveInstance",
+	}, in)
+	if err != nil {
+		m.logger.Error(fmt.Printf("queryManager.RemoveInstance removes instance %s failed: %+v", uuid, err))
+		return
+	}
 }
 
 func (m *Manager) Status() map[string]string {

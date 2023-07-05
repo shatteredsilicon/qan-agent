@@ -35,6 +35,7 @@ var _ plugin.Plugin = (*MySQL)(nil)
 // MySQL handles cmds related to given instance
 type MySQL struct {
 	connFactory mysql.ConnectionFactory
+	mysqlConns  map[string]mysql.Connector
 	cmds        map[string]execFunc
 }
 
@@ -42,11 +43,13 @@ type MySQL struct {
 func New() *MySQL {
 	m := &MySQL{}
 	m.connFactory = &mysql.RealConnectionFactory{}
+	m.mysqlConns = make(map[string]mysql.Connector)
 	m.cmds = map[string]execFunc{
-		"Explain":   m.explain,
-		"TableInfo": m.tableInfo,
-		"Summary":   m.summary,
-		"QueryInfo": m.queryInfo,
+		"Explain":        m.explain,
+		"TableInfo":      m.tableInfo,
+		"Summary":        m.summary,
+		"QueryInfo":      m.queryInfo,
+		"RemoveInstance": m.removeInstance,
 	}
 
 	return m
@@ -65,11 +68,14 @@ func (m *MySQL) Handle(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
 type execFunc func(cmd *proto.Cmd, in proto.Instance) (interface{}, error)
 
 func (m *MySQL) explain(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	conn := m.connFactory.Make(in.DSN)
-	if err := conn.Connect(); err != nil {
-		return nil, err
+	conn, ok := m.mysqlConns[in.UUID]
+	if !ok {
+		conn = m.connFactory.Make(in.DSN)
+		if err := conn.Connect(); err != nil {
+			return nil, err
+		}
+		m.mysqlConns[in.UUID] = conn
 	}
-	defer conn.Close()
 
 	q := &proto.ExplainQuery{}
 	if err := json.Unmarshal(cmd.Data, q); err != nil {
@@ -84,11 +90,14 @@ func (m *MySQL) explain(cmd *proto.Cmd, in proto.Instance) (interface{}, error) 
 }
 
 func (m *MySQL) tableInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	conn := m.connFactory.Make(in.DSN)
-	if err := conn.Connect(); err != nil {
-		return nil, err
+	conn, ok := m.mysqlConns[in.UUID]
+	if !ok {
+		conn = m.connFactory.Make(in.DSN)
+		if err := conn.Connect(); err != nil {
+			return nil, err
+		}
+		m.mysqlConns[in.UUID] = conn
 	}
-	defer conn.Close()
 
 	tableInfo := &proto.TableInfoQuery{}
 	if err := json.Unmarshal(cmd.Data, tableInfo); err != nil {
@@ -99,11 +108,14 @@ func (m *MySQL) tableInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error
 }
 
 func (m *MySQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	conn := m.connFactory.Make(in.DSN)
-	if err := conn.Connect(); err != nil {
-		return nil, err
+	conn, ok := m.mysqlConns[in.UUID]
+	if !ok {
+		conn = m.connFactory.Make(in.DSN)
+		if err := conn.Connect(); err != nil {
+			return nil, err
+		}
+		m.mysqlConns[in.UUID] = conn
 	}
-	defer conn.Close()
 
 	param := &proto.QueryInfoParam{}
 	if err := json.Unmarshal(cmd.Data, param); err != nil {
@@ -111,6 +123,14 @@ func (m *MySQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error
 	}
 
 	return queryinfo.QueryInfo(conn, param)
+}
+
+func (m *MySQL) removeInstance(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
+	if conn, ok := m.mysqlConns[in.UUID]; ok {
+		conn.Close()
+		delete(m.mysqlConns, in.UUID)
+	}
+	return nil, nil
 }
 
 func (m *MySQL) summary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
