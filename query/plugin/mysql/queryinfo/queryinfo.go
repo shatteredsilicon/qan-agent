@@ -173,16 +173,12 @@ func getGuessDBOfTables(c mysql.Connector, tableNames []string) (*proto.GuessDB,
 	var db string
 	var count int
 	err := c.DB().QueryRow(fmt.Sprintf(`
-		SELECT t.table_schema, tt.schema_count
-		FROM information_schema.tables t
-		JOIN (
-			SELECT table_name, COUNT(table_schema) AS schema_count
-			FROM information_schema.tables
-			GROUP BY table_name
-		) tt ON t.table_name = tt.table_name
-		WHERE t.table_name IN (%s)
-		ORDER BY tt.schema_count ASC, t.table_rows IS NULL ASC, t.table_rows DESC
-		LIMIT 1
+		SELECT table_schema, COUNT(*) AS table_count, SUM(ifnull(table_rows,0)) AS table_rows
+		FROM information_schema.tables
+		WHERE table_name IN (%s)
+		GROUP BY table_schema
+		ORDER BY table_count DESC, table_rows DESC
+		LIMIT 1;
 	`, util.Placeholders(len(names))), names...).Scan(&db, &count)
 	if err == sql.ErrNoRows {
 		return nil, nil
