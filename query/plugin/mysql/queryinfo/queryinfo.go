@@ -170,30 +170,48 @@ func getGuessDBOfTables(c mysql.Connector, tableNames []string) (*proto.GuessDB,
 		names[i] = tableNames[i]
 	}
 
-	var db string
-	var count int
-	err := c.DB().QueryRow(fmt.Sprintf(`
-		SELECT t.table_schema, tt.schema_count
-		FROM information_schema.tables t
-		JOIN (
-			SELECT table_name, COUNT(table_schema) AS schema_count
-			FROM information_schema.tables
-			GROUP BY table_name
-		) tt ON t.table_name = tt.table_name
-		WHERE t.table_name IN (%s)
-		ORDER BY tt.schema_count ASC, t.table_rows IS NULL ASC, t.table_rows DESC
-		LIMIT 1
-	`, util.Placeholders(len(names))), names...).Scan(&db, &count)
+	// fetch 2 rows to compare, see if it's ambiguous
+	rows, err := c.DB().Query(fmt.Sprintf(`
+		SELECT table_schema, COUNT(*) AS table_count, SUM(ifnull(table_rows,0)) AS table_rows
+		FROM information_schema.tables
+		WHERE table_name IN (%s)
+		GROUP BY table_schema
+		ORDER BY table_count DESC, table_rows DESC
+		LIMIT 2;
+	`, util.Placeholders(len(names))), names...)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
+	var schema string
+	tableCounts := make([]int64, 0)
+	for i := 0; i < 2 && rows.Next(); i++ {
+		var db string
+		var tableCount, tableRows int64
+
+		err = rows.Scan(&db, &tableCount, &tableRows)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if schema == "" {
+			schema = db
+		}
+		tableCounts = append(tableCounts, tableCount)
+	}
+
+	// if the second schema matches the same amount of tables
+	// as the first one, means it's ambiguous
 	return &proto.GuessDB{
-		DB:          db,
-		IsAmbiguous: count != 1,
+		DB:          schema,
+		IsAmbiguous: len(tableCounts) > 1 && tableCounts[0] == tableCounts[1],
 	}, nil
 }
 
