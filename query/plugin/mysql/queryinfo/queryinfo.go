@@ -17,19 +17,16 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfo
 	var err error
 
 	if len(param.Table) > 0 {
-		var dbMissed bool
-		tableNames := make([]string, len(param.Table))
+		tableNames := make([]string, 0)
 		for i := range param.Table {
-			tableNames[i] = param.Table[i].Table
 			if param.Table[i].Db == "" {
-				dbMissed = true
-			} else {
-				dbName = param.Table[i].Db
-				break
+				tableNames = append(tableNames, param.Table[i].Table)
 			}
 		}
 
-		if dbMissed && dbName == "" {
+		// there are some tables don't have
+		// explicit schemas, we guess it
+		if len(tableNames) > 0 {
 			guessDB, err = getGuessDBOfTables(c, tableNames)
 			if err != nil {
 				return nil, err
@@ -39,7 +36,7 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfo
 			}
 		}
 
-		if dbMissed && dbName != "" {
+		if len(tableNames) > 0 && dbName != "" {
 			for i := range param.Table {
 				if param.Table[i].Db == "" {
 					param.Table[i].Db = dbName
@@ -78,19 +75,16 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfo
 	}
 
 	if len(param.Procedure) > 0 {
-		var dbMissed bool
-		procedureNames := make([]string, len(param.Procedure))
+		procedureNames := make([]string, 0)
 		for i := range param.Procedure {
-			procedureNames[i] = param.Procedure[i].Name
 			if param.Procedure[i].DB == "" {
-				dbMissed = true
-			} else {
-				dbName = param.Procedure[i].DB
-				break
+				procedureNames = append(procedureNames, param.Procedure[i].Name)
 			}
 		}
 
-		if dbMissed && dbName == "" {
+		// there are some procedures don't have
+		// explicit schemas, we guess it
+		if len(procedureNames) > 0 && dbName == "" {
 			guessDB, err = getGuessDBOfProcedures(c, procedureNames)
 			if err != nil {
 				return nil, err
@@ -170,26 +164,48 @@ func getGuessDBOfTables(c mysql.Connector, tableNames []string) (*proto.GuessDB,
 		names[i] = tableNames[i]
 	}
 
-	var db string
-	var count int
-	err := c.DB().QueryRow(fmt.Sprintf(`
+	// fetch 2 rows to compare, see if it's ambiguous
+	rows, err := c.DB().Query(fmt.Sprintf(`
 		SELECT table_schema, COUNT(*) AS table_count, SUM(ifnull(table_rows,0)) AS table_rows
 		FROM information_schema.tables
 		WHERE table_name IN (%s)
 		GROUP BY table_schema
 		ORDER BY table_count DESC, table_rows DESC
-		LIMIT 1;
-	`, util.Placeholders(len(names))), names...).Scan(&db, &count)
+		LIMIT 2;
+	`, util.Placeholders(len(names))), names...)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
+	var schema string
+	tableCounts := make([]int64, 0)
+	for i := 0; i < 2 && rows.Next(); i++ {
+		var db string
+		var tableCount, tableRows int64
+
+		err = rows.Scan(&db, &tableCount, &tableRows)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if schema == "" {
+			schema = db
+		}
+		tableCounts = append(tableCounts, tableCount)
+	}
+
+	// if the second schema matches the same amount of tables
+	// as the first one, means it's ambiguous
 	return &proto.GuessDB{
-		DB:          db,
-		IsAmbiguous: count != 1,
+		DB:          schema,
+		IsAmbiguous: len(tableCounts) > 1 && tableCounts[0] == tableCounts[1],
 	}, nil
 }
 
@@ -207,29 +223,44 @@ func getGuessDBOfProcedures(c mysql.Connector, procedureNames []string) (*proto.
 		names[i] = procedureNames[i]
 	}
 
-	var db string
-	var count int
-	err := c.DB().QueryRow(fmt.Sprintf(`
-		SELECT t.routine_schema, tt.schema_count
-		FROM information_schema.routines t
-		JOIN (
-			SELECT specific_name, COUNT(routine_schema) AS schema_count
-			FROM information_schema.routines
-			GROUP BY specific_name
-		) tt ON t.specific_name = tt.specific_name
-		WHERE t.routine_type = 'PROCEDURE' AND t.specific_name IN (%s)
-		ORDER BY tt.schema_count ASC
-		LIMIT 1
-	`, util.Placeholders(len(names))), names...).Scan(&db, &count)
+	rows, err := c.DB().Query(fmt.Sprintf(`
+		SELECT routine_schema, COUNT(*) AS procedure_count
+		FROM information_schema.routines
+		WHERE routine_type = 'PROCEDURE' AND specific_name IN (%s)
+		GROUP BY routine_schema
+		ORDER BY procedure_count DESC
+		LIMIT 2
+	`, util.Placeholders(len(names))), names...)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+
+	var schema string
+	procedureCounts := make([]int64, 0)
+	for i := 0; i < 2 && rows.Next(); i++ {
+		var db string
+		var procedureCount int64
+
+		err = rows.Scan(&db, &procedureCount)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if schema == "" {
+			schema = db
+		}
+		procedureCounts = append(procedureCounts, procedureCount)
+	}
 
 	return &proto.GuessDB{
-		DB:          db,
-		IsAmbiguous: count != 1,
+		DB:          schema,
+		IsAmbiguous: len(procedureCounts) > 1 && procedureCounts[0] == procedureCounts[1],
 	}, nil
 }
