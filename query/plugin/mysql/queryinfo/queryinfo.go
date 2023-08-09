@@ -17,19 +17,16 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfo
 	var err error
 
 	if len(param.Table) > 0 {
-		var dbMissed bool
-		tableNames := make([]string, len(param.Table))
+		tableNames := make([]string, 0)
 		for i := range param.Table {
-			tableNames[i] = param.Table[i].Table
 			if param.Table[i].Db == "" {
-				dbMissed = true
-			} else {
-				dbName = param.Table[i].Db
-				break
+				tableNames = append(tableNames, param.Table[i].Table)
 			}
 		}
 
-		if dbMissed && dbName == "" {
+		// there are some tables don't have
+		// explicit schemas, we guess it
+		if len(tableNames) > 0 {
 			guessDB, err = getGuessDBOfTables(c, tableNames)
 			if err != nil {
 				return nil, err
@@ -39,7 +36,7 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfo
 			}
 		}
 
-		if dbMissed && dbName != "" {
+		if len(tableNames) > 0 && dbName != "" {
 			for i := range param.Table {
 				if param.Table[i].Db == "" {
 					param.Table[i].Db = dbName
@@ -78,19 +75,16 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfo
 	}
 
 	if len(param.Procedure) > 0 {
-		var dbMissed bool
-		procedureNames := make([]string, len(param.Procedure))
+		procedureNames := make([]string, 0)
 		for i := range param.Procedure {
-			procedureNames[i] = param.Procedure[i].Name
 			if param.Procedure[i].DB == "" {
-				dbMissed = true
-			} else {
-				dbName = param.Procedure[i].DB
-				break
+				procedureNames = append(procedureNames, param.Procedure[i].Name)
 			}
 		}
 
-		if dbMissed && dbName == "" {
+		// there are some procedures don't have
+		// explicit schemas, we guess it
+		if len(procedureNames) > 0 && dbName == "" {
 			guessDB, err = getGuessDBOfProcedures(c, procedureNames)
 			if err != nil {
 				return nil, err
