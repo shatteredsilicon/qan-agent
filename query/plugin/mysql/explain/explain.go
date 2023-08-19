@@ -20,10 +20,12 @@ package explain
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/ssm/proto"
+	"vitess.io/vitess/go/vt/sqlparser"
 )
 
 func Explain(c mysql.Connector, db, query string, convert, ignoreClassic bool) (*proto.ExplainResult, error) {
@@ -69,19 +71,54 @@ func explain(c mysql.Connector, db, query string, ignoreClassic bool) (*proto.Ex
 	}
 
 	explain := &proto.ExplainResult{}
-	if !ignoreClassic {
-		explain.Classic, err = classicExplain(c, tx, query)
-		if err != nil {
-			return nil, err
+	var originErr error
+	explain.Classic, explain.JSON, originErr = realExplain(c, tx, query, ignoreClassic)
+	if originErr == nil {
+		return explain, nil
+	}
+
+	// First try failed, see if this is a query that we can
+	// adjust to make EXPLAIN works
+	s, err := sqlparser.Parse(query)
+	if err != nil {
+		return nil, err
+	}
+
+	var newQuery string
+	switch s.(type) {
+	case *sqlparser.Delete: // DELETE statement, try changing it to SELECT statement
+		if indexes := regexp.MustCompile(`(?i)\sFROM\s`).FindIndex([]byte(query)); len(indexes) > 0 {
+			newQuery = fmt.Sprintf("SELECT * %s", query[indexes[0]:])
+		}
+	case *sqlparser.Insert:
+		switch s.(*sqlparser.Insert).Rows.(type) {
+		case *sqlparser.Select: // INSERT INTO ... SELECT statement, try explaining the SELECT part only
+			newQuery = sqlparser.String(s.(*sqlparser.Insert).Rows)
 		}
 	}
 
-	explain.JSON, err = jsonExplain(c, tx, query)
+	if newQuery == "" {
+		return nil, originErr
+	}
+
+	explain.Classic, explain.JSON, err = realExplain(c, tx, newQuery, ignoreClassic)
 	if err != nil {
 		return nil, err
 	}
 
 	return explain, nil
+}
+
+func realExplain(c mysql.Connector, tx *sql.Tx, query string, ignoreClassic bool) (classic []*proto.ExplainRow, json string, err error) {
+	if !ignoreClassic {
+		classic, err = classicExplain(c, tx, query)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	json, err = jsonExplain(c, tx, query)
+	return classic, json, err
 }
 
 func classicExplain(c mysql.Connector, tx *sql.Tx, query string) (classicExplain []*proto.ExplainRow, err error) {
