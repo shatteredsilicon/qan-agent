@@ -107,6 +107,8 @@ func TestExplain(t *testing.T) {
 		testExplainWithDb,
 		testExplainWithoutDb,
 		testExplainWithoutQuery,
+		testExplainDelete,
+		testExplainInsertSelect,
 	}
 	t.Run("explain", func(t *testing.T) {
 		for _, f := range tests {
@@ -1080,4 +1082,94 @@ func testExplainWithDb(t *testing.T, conn mysql.Connector) {
 	expectedExplainResult.JSON = ""
 	gotExplainResult.JSON = ""
 	assert.Equal(t, expectedExplainResult, gotExplainResult, "%#+v", gotExplainResult)
+}
+
+func testExplainDelete(t *testing.T, conn mysql.Connector) {
+	// prepare test data
+	_, err := conn.DB().Exec("CREATE DATABASE IF NOT EXISTS `test`")
+	assert.Nil(t, err)
+
+	_, err = conn.DB().Exec("CREATE TABLE IF NOT EXISTS `test`.`t` ( c VARCHAR(255) )")
+	assert.Nil(t, err)
+
+	data := []struct {
+		db         string
+		query      string
+		shouldPass bool
+	}{
+		{
+			db:         "test",
+			query:      "DELETE FROM t",
+			shouldPass: true,
+		},
+		{
+			db:         "test",
+			query:      "DeLeTe LOW_PRIORITY FROM t",
+			shouldPass: true,
+		},
+		{
+			db:         "notexistdatabase",
+			query:      "DELETE FROM t",
+			shouldPass: false,
+		},
+		{
+			db:         "test",
+			query:      "DELETE DELETE DELETE FROM t",
+			shouldPass: false,
+		},
+	}
+
+	for _, d := range data {
+		_, err = Explain(conn, d.db, d.query, true, false)
+		if d.shouldPass {
+			assert.Nil(t, err)
+		} else {
+			assert.NotNil(t, err)
+		}
+	}
+}
+
+func testExplainInsertSelect(t *testing.T, conn mysql.Connector) {
+	// prepare test data
+	_, err := conn.DB().Exec("CREATE DATABASE IF NOT EXISTS `test`")
+	assert.Nil(t, err)
+
+	_, err = conn.DB().Exec("CREATE TABLE IF NOT EXISTS `test`.`t` ( c VARCHAR(255) )")
+	assert.Nil(t, err)
+
+	data := []struct {
+		db         string
+		query      string
+		shouldPass bool
+	}{
+		{
+			db:         "test",
+			query:      "INSERT INTO t SELECT * FROM t",
+			shouldPass: true,
+		},
+		{
+			db:         "test",
+			query:      "InSeRt Into t SELECT * from t",
+			shouldPass: true,
+		},
+		{
+			db:         "notexistdatabase",
+			query:      "INSERT INTO t SELECT * FROM t",
+			shouldPass: false,
+		},
+		{
+			db:         "test",
+			query:      "INSERT INTO INTO t SELECT * FROM t",
+			shouldPass: false,
+		},
+	}
+
+	for _, d := range data {
+		_, err = Explain(conn, d.db, d.query, true, false)
+		if d.shouldPass {
+			assert.Nil(t, err)
+		} else {
+			assert.NotNil(t, err)
+		}
+	}
 }
