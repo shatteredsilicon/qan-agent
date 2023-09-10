@@ -1,9 +1,9 @@
 package worker
 
 import (
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 // A Worker gets queries, aggregates them, and returns a Result. Workers are ran
@@ -14,5 +14,5 @@ type Worker interface {
 	Stop() error
 	Cleanup() error
 	Status() map[string]string
-	SetConfig(pc.QAN)
+	SetConfig(config.QAN)
 }

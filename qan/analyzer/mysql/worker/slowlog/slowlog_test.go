@@ -31,6 +31,7 @@ import (
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
@@ -64,7 +65,7 @@ type WorkerTestSuite struct {
 	logger        *pct.Logger
 	now           time.Time
 	mysqlInstance proto.Instance
-	config        pc.QAN
+	config        config.QAN
 	mysqlConn     mysql.Connector
 	worker        *Worker
 	nullmysql     *mock.NullMySQL
@@ -82,21 +83,23 @@ func (s *WorkerTestSuite) SetUpSuite(t *C) {
 	s.now = time.Now().UTC()
 	s.mysqlInstance = proto.Instance{UUID: "1", Name: "mysql1"}
 	exampleQueries := true
-	s.config = pc.QAN{
-		UUID: s.mysqlInstance.UUID,
-		Start: []string{
-			"SET GLOBAL slow_query_log=OFF",
-			"SET GLOBAL long_query_time=0.123",
-			"SET GLOBAL slow_query_log=ON",
+	s.config = config.QAN{
+		QAN: pc.QAN{
+			UUID: s.mysqlInstance.UUID,
+			Start: []string{
+				"SET GLOBAL slow_query_log=OFF",
+				"SET GLOBAL long_query_time=0.123",
+				"SET GLOBAL slow_query_log=ON",
+			},
+			Stop: []string{
+				"SET GLOBAL slow_query_log=OFF",
+				"SET GLOBAL long_query_time=10",
+			},
+			Interval:       60,         // 1 min
+			MaxSlowLogSize: 1073741824, // 1 GiB
+			ExampleQueries: &exampleQueries,
+			CollectFrom:    "slowlog",
 		},
-		Stop: []string{
-			"SET GLOBAL slow_query_log=OFF",
-			"SET GLOBAL long_query_time=10",
-		},
-		Interval:       60,         // 1 min
-		MaxSlowLogSize: 1073741824, // 1 GiB
-		ExampleQueries: &exampleQueries,
-		CollectFrom:    "slowlog",
 	}
 	s.nullmysql = mock.NewNullMySQL()
 }
@@ -105,7 +108,7 @@ func (s *WorkerTestSuite) SetUpTest(t *C) {
 	s.nullmysql.Reset()
 }
 
-func (s *WorkerTestSuite) RunWorker(config pc.QAN, mysqlConn mysql.Connector, i *iter.Interval) (*report.Result, error) {
+func (s *WorkerTestSuite) RunWorker(config config.QAN, mysqlConn mysql.Connector, i *iter.Interval) (*report.Result, error) {
 	w := NewWorker(s.logger, config, mysqlConn)
 	w.ZeroRunTime = true
 	resultChan := make(chan *report.Result)
@@ -292,20 +295,22 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 	exampleQueries := true
 	slowLogsRotation := true
 	slowLogsToKeep := 1
-	config := pc.QAN{
-		UUID:            s.mysqlInstance.UUID,
-		Interval:        300,
-		MaxSlowLogSize:  1000, // <-- HERE
-		ExampleQueries:  &exampleQueries,
-		SlowLogRotation: &slowLogsRotation,
-		RetainSlowLogs:  &slowLogsToKeep,
-		Start: []string{
-			"-- start",
+	config := config.QAN{
+		QAN: pc.QAN{
+			UUID:            s.mysqlInstance.UUID,
+			Interval:        300,
+			MaxSlowLogSize:  1000, // <-- HERE
+			ExampleQueries:  &exampleQueries,
+			SlowLogRotation: &slowLogsRotation,
+			RetainSlowLogs:  &slowLogsToKeep,
+			Start: []string{
+				"-- start",
+			},
+			Stop: []string{
+				"-- stop",
+			},
+			CollectFrom: "slowlog",
 		},
-		Stop: []string{
-			"-- stop",
-		},
-		CollectFrom: "slowlog",
 	}
 	w := NewWorker(s.logger, config, s.nullmysql)
 
@@ -393,7 +398,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 }
 
 func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
-	// Same as TestRotateAndRemoveSlowLog but pc.QAN.RemoveOldSlowLogs=false
+	// Same as TestRotateAndRemoveSlowLog but config.QAN.RemoveOldSlowLogs=false
 	// so the old slow log file is not removed.
 
 	slowlogFile := "slow006.log"
@@ -406,20 +411,22 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 	exampleQueries := true
 	slowLogsRotation := true
 	slowLogsToKeep := 1
-	config := pc.QAN{
-		UUID:            s.mysqlInstance.UUID,
-		Interval:        300,
-		MaxSlowLogSize:  1000,
-		ExampleQueries:  &exampleQueries,
-		SlowLogRotation: &slowLogsRotation,
-		RetainSlowLogs:  &slowLogsToKeep,
-		Start: []string{
-			"-- start",
+	config := config.QAN{
+		QAN: pc.QAN{
+			UUID:            s.mysqlInstance.UUID,
+			Interval:        300,
+			MaxSlowLogSize:  1000,
+			ExampleQueries:  &exampleQueries,
+			SlowLogRotation: &slowLogsRotation,
+			RetainSlowLogs:  &slowLogsToKeep,
+			Start: []string{
+				"-- start",
+			},
+			Stop: []string{
+				"-- stop",
+			},
+			CollectFrom: "slowlog",
 		},
-		Stop: []string{
-			"-- stop",
-		},
-		CollectFrom: "slowlog",
 	}
 	w := NewWorker(s.logger, config, s.nullmysql)
 
@@ -574,20 +581,22 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 
 	// See TestStartService() for description of these startup tasks.
 	exampleQueries := true
-	config := pc.QAN{
-		UUID:           s.mysqlInstance.UUID,
-		Interval:       300,
-		MaxSlowLogSize: 1000,
-		ExampleQueries: &exampleQueries,
-		Start: []string{
-			"SET GLOBAL slow_query_log=1",
-			fmt.Sprintf("SET GLOBAL slow_query_log_file='%s'", slowlogFile),
+	config := config.QAN{
+		QAN: pc.QAN{
+			UUID:           s.mysqlInstance.UUID,
+			Interval:       300,
+			MaxSlowLogSize: 1000,
+			ExampleQueries: &exampleQueries,
+			Start: []string{
+				"SET GLOBAL slow_query_log=1",
+				fmt.Sprintf("SET GLOBAL slow_query_log_file='%s'", slowlogFile),
+			},
+			Stop: []string{
+				"SET GLOBAL slow_query_log=0",
+				"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS",
+			},
+			CollectFrom: "slowlog",
 		},
-		Stop: []string{
-			"SET GLOBAL slow_query_log=0",
-			"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS",
-		},
-		CollectFrom: "slowlog",
 	}
 	w := NewWorker(s.logger, config, conn)
 
@@ -663,13 +672,15 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 }
 
 func (s *WorkerTestSuite) TestStop(t *C) {
-	config := pc.QAN{
-		UUID:           s.mysqlInstance.UUID,
-		Interval:       300,
-		MaxSlowLogSize: 1024 * 1024 * 1024,
-		Start:          []string{},
-		Stop:           []string{},
-		CollectFrom:    "slowlog",
+	config := config.QAN{
+		QAN: pc.QAN{
+			UUID:           s.mysqlInstance.UUID,
+			Interval:       300,
+			MaxSlowLogSize: 1024 * 1024 * 1024,
+			Start:          []string{},
+			Stop:           []string{},
+			CollectFrom:    "slowlog",
+		},
 	}
 	w := NewWorker(s.logger, config, s.nullmysql)
 
@@ -755,12 +766,14 @@ func (s *WorkerTestSuite) TestStop(t *C) {
 }
 
 func (s *WorkerTestSuite) TestResult014(t *C) {
-	config := pc.QAN{
-		UUID:           "1",
-		CollectFrom:    "slowlog",
-		Interval:       60,
-		ReportLimit:    500,
-		MaxSlowLogSize: 1024 * 1024 * 1000,
+	config := config.QAN{
+		QAN: pc.QAN{
+			UUID:           "1",
+			CollectFrom:    "slowlog",
+			Interval:       60,
+			ReportLimit:    500,
+			MaxSlowLogSize: 1024 * 1024 * 1000,
+		},
 	}
 	logChan := make(chan proto.LogEntry, 1000)
 	w := NewWorker(pct.NewLogger(logChan, "w"), config, mock.NewNullMySQL())
@@ -790,7 +803,7 @@ func (s *WorkerTestSuite) TestResult014(t *C) {
 		StartOffset: 0,
 		EndOffset:   127118680,
 	}
-	report := report.MakeReport(config, interval.StartTime, interval.StopTime, interval, result, nil)
+	report := report.MakeReport(config.QAN, interval.StartTime, interval.StopTime, interval, result, nil)
 
 	t.Check(report.Global.TotalQueries, Equals, uint(4))
 	t.Check(report.Global.UniqueQueries, Equals, uint(4))

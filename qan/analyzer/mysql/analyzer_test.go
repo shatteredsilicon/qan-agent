@@ -26,6 +26,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	mysqlAnalyzer "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/slowlog"
 	"github.com/shatteredsilicon/qan-agent/test"
@@ -59,7 +60,7 @@ type AnalyzerTestSuite struct {
 	im            *instance.Repo
 	mysqlUUID     string
 	mysqlInstance proto.Instance
-	config        pc.QAN
+	config        config.QAN
 }
 
 var _ = Suite(&AnalyzerTestSuite{})
@@ -125,19 +126,21 @@ func (s *AnalyzerTestSuite) SetUpTest(t *C) {
 	// Config needs to be recreated on every test since it can be modified by the test analyzers
 	exampleQueries := true
 	slowLogRotation := true
-	s.config = pc.QAN{
-		UUID:            s.mysqlUUID,
-		CollectFrom:     "slowlog",
-		Interval:        60,
-		MaxSlowLogSize:  MAX_SLOW_LOG_SIZE,
-		SlowLogRotation: &slowLogRotation,
-		Start: []string{
-			"-- start",
+	s.config = config.QAN{
+		QAN: pc.QAN{
+			UUID:            s.mysqlUUID,
+			CollectFrom:     "slowlog",
+			Interval:        60,
+			MaxSlowLogSize:  MAX_SLOW_LOG_SIZE,
+			SlowLogRotation: &slowLogRotation,
+			Start: []string{
+				"-- start",
+			},
+			Stop: []string{
+				"-- stop",
+			},
+			ExampleQueries: &exampleQueries,
 		},
-		Stop: []string{
-			"-- stop",
-		},
-		ExampleQueries: &exampleQueries,
 	}
 }
 

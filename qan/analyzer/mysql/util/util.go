@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"regexp"
 
-	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 )
 
 var logHeaderRe = regexp.MustCompile(`^#\s*[A-Z]`)
 
-func GetMySQLConfig(config pc.QAN) ([]string, []string, error) {
+func GetMySQLConfig(config config.QAN) ([]string, []string, error) {
 	switch config.CollectFrom {
 	case "slowlog":
 		return makeSlowLogConfig()

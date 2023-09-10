@@ -29,11 +29,11 @@ import (
 	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
@@ -149,7 +149,7 @@ type Class struct {
 type Snapshot map[string]Class // keyed on digest (classId)
 
 type WorkerFactory interface {
-	Make(name string, mysqlConn mysql.Connector, filterOmit []string) *Worker
+	Make(name string, mysqlConn mysql.Connector, cfg config.QAN) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -169,9 +169,9 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, filterOmit []string) *Worker {
+func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, cfg config.QAN) *Worker {
 	getRows := func(c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error {
-		return GetDigestRows(mysqlConn, lastFetchSeconds, c, doneChan, filterOmit)
+		return GetDigestRows(mysqlConn, lastFetchSeconds, c, doneChan, cfg)
 	}
 
 	return NewWorker(pct.NewLogger(f.logChan, name), mysqlConn, getRows)
@@ -181,7 +181,7 @@ func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, filterO
 // fetches snapshot of data from events_statements_summary_by_digest,
 // delivers it over a channel, and notifies success or error through `doneChan`.
 // If `lastFetchSeconds` equals `-1` then it fetches all data, not just since `lastFetchSeconds`.
-func GetDigestRows(mysqlConn mysql.Connector, lastFetchSeconds float64, c chan<- *DigestRow, doneChan chan<- error, filterOmit []string) error {
+func GetDigestRows(mysqlConn mysql.Connector, lastFetchSeconds float64, c chan<- *DigestRow, doneChan chan<- error, cfg config.QAN) error {
 	q := `
 SELECT
 	COALESCE(SCHEMA_NAME, ''),
@@ -273,18 +273,9 @@ SELECT
 			// https://dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-11.html
 			row.DigestText = strings.TrimSpace(row.DigestText)
 
-			var omit bool
-			for _, omitQuery := range filterOmit {
-				if strings.HasPrefix(
-					strings.TrimSpace(strings.ToLower(row.DigestText)),
-					strings.TrimSpace(strings.ToLower(omitQuery)),
-				) {
-					omit = true
-					break
-				}
-			}
-			if omit {
-				continue
+			// check if query should be omitted first
+			if cfg.IsQueryOmitted(row.DigestText) {
+				break
 			}
 
 			c <- row
@@ -294,7 +285,7 @@ SELECT
 		}
 
 		preStmtDoneChan := make(chan error, 1)
-		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan, filterOmit); err != nil {
+		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan, cfg); err != nil {
 			return
 		}
 
@@ -311,7 +302,7 @@ SELECT
 // GetPreStmtRows connects to MySQL through `mysql.Connector`,
 // fetches rows from prepared_stmtements_instances and converts rows into DigestRow structure,
 // delivers it over a channel, and notifies success or error through `doneChan`.
-func GetPreStmtRows(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error, filterOmit []string) error {
+func GetPreStmtRows(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error, cfg config.QAN) error {
 	q := `
 SELECT
 	STATEMENT_ID,
@@ -398,18 +389,9 @@ SELECT
 				return // This bubbles up too (see above).
 			}
 
-			var omit bool
-			for _, omitQuery := range filterOmit {
-				if strings.HasPrefix(
-					strings.TrimSpace(strings.ToLower(row.SQLText)),
-					strings.TrimSpace(strings.ToLower(omitQuery)),
-				) {
-					omit = true
-					break
-				}
-			}
-			if omit {
-				continue
+			// check if query should be omitted first
+			if cfg.IsQueryOmitted(row.SQLText) {
+				break
 			}
 
 			c <- row.ConvertToDigestRow()
@@ -545,7 +527,7 @@ func (w *Worker) Status() map[string]string {
 	return w.status.All()
 }
 
-func (w *Worker) SetConfig(config pc.QAN) {
+func (w *Worker) SetConfig(config config.QAN) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	w.collectExamples = *config.ExampleQueries

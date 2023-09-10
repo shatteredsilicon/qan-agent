@@ -128,7 +128,7 @@ func (m *MySQLAnalyzer) Start() error {
 	case "slowlog":
 		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
 	case "perfschema":
-		worker = m.perfschemaWorkerFactory.Make(name+"-worker", mysqlConn, setConfig.FilterOmit)
+		worker = m.perfschemaWorkerFactory.Make(name+"-worker", mysqlConn, config)
 	case "rds-slowlog":
 		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
 	default:
@@ -202,6 +202,7 @@ func (m *MySQLAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 		"ExampleQueries":  m.config.ExampleQueries,
 		"ReportLimit":     m.config.ReportLimit,
 		"FilterOmit":      m.config.FilterOmit,
+		"FilterAllow":     m.config.FilterAllow,
 	}
 
 	// Info from SHOW GLOBAL STATUS

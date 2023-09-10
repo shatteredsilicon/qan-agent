@@ -15,7 +15,7 @@ require (
 	github.com/percona/pmgo v0.0.0-20171205120904-497d06e28f91
 	github.com/peterbourgon/diskv v2.0.1+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/shatteredsilicon/ssm v0.0.0-20230602071342-e3d909e35c87
+	github.com/shatteredsilicon/ssm v0.0.0-20230910151141-a48cc4fa2f0c
 	github.com/stretchr/testify v1.8.1
 	go4.org v0.0.0-20180417224846-9599cf28b011
 	golang.org/x/net v0.7.0

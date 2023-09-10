@@ -34,8 +34,8 @@ import (
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/agent/release"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 const rdsServiceAPIURI = "/v0/rds/detail"
@@ -54,7 +54,7 @@ type RDSServiceDetail struct {
 }
 
 // GetRDSServiceDetail fetches rds service detail data from ssm-managed
-func GetRDSServiceDetail(cfg agent.AgentConfig, qanCfg pc.QAN) (*RDSServiceDetail, error) {
+func GetRDSServiceDetail(cfg agent.AgentConfig, qanCfg config.QAN) (*RDSServiceDetail, error) {
 	schema := "http"
 	if cfg.ServerSSL || cfg.ServerInsecureSSL {
 		schema = "https"

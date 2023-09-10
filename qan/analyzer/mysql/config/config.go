@@ -101,7 +101,7 @@ func ReadInfoFromShowGlobalStatus(conn mysql.Connector) (info map[string]interfa
 	return info
 }
 
-func ValidateConfig(setConfig pc.QAN) (pc.QAN, error) {
+func ValidateConfig(setConfig pc.QAN) (QAN, error) {
 	runConfig := pc.NewQAN()
 	fmt.Printf("%+v\n", runConfig)
 
@@ -109,11 +109,11 @@ func ValidateConfig(setConfig pc.QAN) (pc.QAN, error) {
 	// This way we keep defaults if they are not set in setConfig.
 	b, err := json.Marshal(setConfig)
 	if err != nil {
-		return runConfig, err
+		return QAN{QAN: runConfig}, err
 	}
 	err = json.Unmarshal(b, &runConfig)
 	if err != nil {
-		return runConfig, err
+		return QAN{QAN: runConfig}, err
 	}
 	fmt.Printf("%+v\n", runConfig)
 
@@ -122,23 +122,55 @@ func ValidateConfig(setConfig pc.QAN) (pc.QAN, error) {
 
 	// Strings
 	if setConfig.CollectFrom != "slowlog" && setConfig.CollectFrom != "perfschema" && setConfig.CollectFrom != "rds-slowlog" {
-		return runConfig, fmt.Errorf("CollectFrom must be 'slowlog' or 'perfschema'")
+		return QAN{QAN: runConfig}, fmt.Errorf("CollectFrom must be 'slowlog' or 'perfschema'")
 	}
 	runConfig.CollectFrom = setConfig.CollectFrom
 
 	// Integers
 	if setConfig.Interval < 0 || setConfig.Interval > 3600 {
-		return runConfig, fmt.Errorf("Interval must be > 0 and <= 3600 (1 hour)")
+		return QAN{QAN: runConfig}, fmt.Errorf("Interval must be > 0 and <= 3600 (1 hour)")
 	}
 	if setConfig.Interval > 0 {
 		runConfig.Interval = setConfig.Interval
 	}
 
-	return runConfig, nil
+	return QAN{QAN: runConfig}, nil
 }
 
 // UnderscoreToCamelCase converts from underscore separated form to camel case form.
 // Ex.: my_func => MyFunc
 func underscoreToCamelCase(s string) string {
 	return strings.Replace(strings.Title(strings.Replace(strings.ToLower(s), "_", " ", -1)), " ", "", -1)
+}
+
+// local QAN struct of proto QAN config
+type QAN struct {
+	pc.QAN
+}
+
+func (q QAN) IsQueryOmitted(fingerprint string) bool {
+	var omit bool
+	if len(q.FilterAllow) > 0 {
+		omit = true
+		for _, allowQuery := range q.FilterAllow {
+			if strings.HasPrefix(
+				strings.TrimSpace(strings.ToLower(fingerprint)),
+				strings.TrimSpace(strings.ToLower(allowQuery)),
+			) {
+				omit = false
+				break
+			}
+		}
+	}
+	for _, omitQuery := range q.FilterOmit {
+		if strings.HasPrefix(
+			strings.TrimSpace(strings.ToLower(fingerprint)),
+			strings.TrimSpace(strings.ToLower(omitQuery)),
+		) {
+			omit = true
+			break
+		}
+	}
+
+	return omit
 }
