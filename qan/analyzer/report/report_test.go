@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/event"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	. "github.com/shatteredsilicon/qan-agent/test/rootdir"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
@@ -51,11 +52,13 @@ func TestResult001(t *testing.T) {
 		StartOffset: 0,
 		EndOffset:   1000,
 	}
-	config := pc.QAN{
-		UUID:        "1",
-		ReportLimit: 10,
+	config := config.QAN{
+		QAN: pc.QAN{
+			UUID:        "1",
+			ReportLimit: 10,
+		},
 	}
-	report := MakeReport(config, interval.StartTime, interval.StopTime, interval, result, nil)
+	report := MakeReport(config.QAN, interval.StartTime, interval.StopTime, interval, result, nil)
 
 	// 1st: 2.9
 	assert.Equal(t, "3000000000000003", report.Class[0].Id)
@@ -70,7 +73,7 @@ func TestResult001(t *testing.T) {
 
 	// Limit=2 results in top 2 queries and the rest in 1 LRQ "query".
 	config.ReportLimit = 2
-	report = MakeReport(config, interval.StartTime, interval.StopTime, interval, result, nil)
+	report = MakeReport(config.QAN, interval.StartTime, interval.StopTime, interval, result, nil)
 	assert.Equal(t, 3, len(report.Class))
 
 	assert.Equal(t, "3000000000000003", report.Class[0].Id)

@@ -20,13 +20,14 @@ package util
 import (
 	"testing"
 
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSlowLogMySQLBasic(t *testing.T) {
-	on, off, err := GetMySQLConfig(pc.QAN{CollectFrom: "slowlog"})
+	on, off, err := GetMySQLConfig(config.QAN{QAN: pc.QAN{CollectFrom: "slowlog"}})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"SET GLOBAL slow_query_log=OFF",

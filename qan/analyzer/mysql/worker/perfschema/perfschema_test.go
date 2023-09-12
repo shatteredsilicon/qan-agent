@@ -32,6 +32,7 @@ import (
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
@@ -463,7 +464,7 @@ func testRealWorker(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn, nil)
+	w := f.Make("qan-worker", mysqlWorkerConn, config.QAN{})
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},
@@ -565,7 +566,7 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn, nil)
+	w := f.Make("qan-worker", mysqlWorkerConn, config.QAN{})
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},
@@ -653,7 +654,7 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn, nil)
+	w := f.Make("qan-worker", mysqlWorkerConn, config.QAN{})
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},

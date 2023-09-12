@@ -28,6 +28,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker"
@@ -44,7 +45,7 @@ const MIN_SLOWLOG_ROTATION_SIZE int64 = 4096
 
 type RealAnalyzer struct {
 	logger      *pct.Logger
-	config      pc.QAN
+	config      config.QAN
 	iter        iter.IntervalIter
 	mysqlConn   mysql.Connector
 	mrms        mrms.Monitor
@@ -67,7 +68,7 @@ type RealAnalyzer struct {
 
 func NewRealAnalyzer(
 	logger *pct.Logger,
-	config pc.QAN,
+	config config.QAN,
 	it iter.IntervalIter,
 	mysqlConn mysql.Connector,
 	restartChan chan proto.Instance,
@@ -146,11 +147,11 @@ func (a *RealAnalyzer) Status() map[string]string {
 }
 
 func (a *RealAnalyzer) Config() pc.QAN {
-	return a.config
+	return a.config.QAN
 }
 
-func (a *RealAnalyzer) SetConfig(config pc.QAN) {
-	a.config = config
+func (a *RealAnalyzer) SetConfig(c pc.QAN) {
+	a.config = config.QAN{QAN: c}
 }
 
 func (m *RealAnalyzer) GetDefaults(uuid string) map[string]interface{} {
@@ -471,7 +472,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 			if t1.Sub(t0).Seconds() < 1 {
 				t1 = t0.Add(time.Second)
 			}
-			rep := report.MakeReport(a.config, t0, t1, interval, result, a.logger)
+			rep := report.MakeReport(a.config.QAN, t0, t1, interval, result, a.logger)
 			if err := a.spool.Write("qan", rep); err != nil {
 				a.logger.Warn("Lost report:", err)
 			}
@@ -532,7 +533,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 
 		// Translate the results into a report and spool.
 		// NOTE: "qan" here is correct; do not use a.name.
-		report := report.MakeReport(a.config, interval.StartTime, interval.StopTime, interval, result, a.logger)
+		report := report.MakeReport(a.config.QAN, interval.StartTime, interval.StopTime, interval, result, a.logger)
 		if err := a.spool.Write("qan", report); err != nil {
 			a.logger.Warn("Lost report:", err)
 		}

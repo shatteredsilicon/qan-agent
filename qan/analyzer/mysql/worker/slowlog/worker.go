@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
@@ -34,7 +33,6 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 const (
@@ -42,7 +40,7 @@ const (
 )
 
 type WorkerFactory interface {
-	Make(name string, config pc.QAN, mysqlConn mysql.Connector) *Worker
+	Make(name string, config config.QAN, mysqlConn mysql.Connector) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -56,7 +54,7 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, config pc.QAN, mysqlConn mysql.Connector) *Worker {
+func (f *RealWorkerFactory) Make(name string, config config.QAN, mysqlConn mysql.Connector) *Worker {
 	return NewWorker(pct.NewLogger(f.logChan, name), config, mysqlConn)
 }
 
@@ -78,7 +76,7 @@ func (j *Job) String() string {
 
 type Worker struct {
 	logger    *pct.Logger
-	config    pc.QAN
+	config    config.QAN
 	mysqlConn mysql.Connector
 	// --
 	ZeroRunTime bool // testing
@@ -99,7 +97,7 @@ type Worker struct {
 	resultChan      chan *report.Result
 }
 
-func NewWorker(logger *pct.Logger, config pc.QAN, mysqlConn mysql.Connector) *Worker {
+func NewWorker(logger *pct.Logger, config config.QAN, mysqlConn mysql.Connector) *Worker {
 	// By default replace numbers in words with ?
 	query.ReplaceNumbersInWords = true
 
@@ -342,17 +340,7 @@ EVENT_LOOP:
 		select {
 		case fingerprint = <-w.fingerprintChan:
 			// check if query should be omitted first
-			var omit bool
-			for _, omitQuery := range w.config.FilterOmit {
-				if strings.HasPrefix(
-					strings.TrimSpace(strings.ToLower(fingerprint)),
-					strings.TrimSpace(strings.ToLower(omitQuery)),
-				) {
-					omit = true
-					break
-				}
-			}
-			if omit {
+			if w.config.IsQueryOmitted(fingerprint) {
 				break
 			}
 
@@ -406,7 +394,7 @@ func (w *Worker) Status() map[string]string {
 	return w.status.All()
 }
 
-func (w *Worker) SetConfig(config pc.QAN) {
+func (w *Worker) SetConfig(config config.QAN) {
 	w.config = config
 }
 
