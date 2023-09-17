@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/peterbourgon/diskv"
@@ -61,22 +62,24 @@ type DiskvSpooler struct {
 	hostname string
 	limits   pc.DataSpoolLimits
 	// --
-	sz           proto.Serializer
-	dataChan     chan *proto.Data
-	sync         *pct.SyncChan
-	cache        *diskv.Diskv
-	status       *pct.Status
-	mux          *sync.Mutex
-	trashDataDir string
-	count        uint
-	size         uint64
-	oldest       int64
-	fileSize     map[string]int
-	cancelChan   chan struct{}
-	purgeChan    chan time.Time
+	sz                     proto.Serializer
+	dataChan               chan *proto.Data
+	sync                   *pct.SyncChan
+	cache                  *diskv.Diskv
+	status                 *pct.Status
+	mux                    *sync.Mutex
+	trashDataDir           string
+	count                  uint
+	size                   uint64
+	oldest                 int64
+	fileSize               map[string]int
+	cancelChan             chan struct{}
+	purgeChan              chan time.Time
+	sigChan                chan os.Signal
+	continuouslyDiskErrors uint
 }
 
-func NewDiskvSpooler(logger *pct.Logger, dataDir, trashDir, hostname string, limits pc.DataSpoolLimits) *DiskvSpooler {
+func NewDiskvSpooler(logger *pct.Logger, dataDir, trashDir, hostname string, limits pc.DataSpoolLimits, sigChan chan os.Signal) *DiskvSpooler {
 	s := &DiskvSpooler{
 		logger:   logger,
 		dataDir:  dataDir,
@@ -89,6 +92,7 @@ func NewDiskvSpooler(logger *pct.Logger, dataDir, trashDir, hostname string, lim
 		status:   pct.NewStatus([]string{"data-spooler", "data-spooler-count", "data-spooler-size", "data-spooler-oldest"}),
 		mux:      new(sync.Mutex),
 		fileSize: make(map[string]int),
+		sigChan:  sigChan,
 	}
 	return s
 }
@@ -212,7 +216,14 @@ func (s *DiskvSpooler) Write(service string, data interface{}) error {
 	// Write data to disk.
 	select {
 	case s.dataChan <- protoData:
+		s.continuouslyDiskErrors = 0
 	case <-time.After(1 * time.Second):
+		s.continuouslyDiskErrors++
+		if s.continuouslyDiskErrors > 3 {
+			s.sigChan <- syscall.SIGTERM
+			return ErrSpoolTimeout
+		}
+
 		// Let caller decide what to do.
 		s.logger.Debug("write:timeout")
 		return ErrSpoolTimeout

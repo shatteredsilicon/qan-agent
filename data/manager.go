@@ -53,9 +53,10 @@ type Manager struct {
 	spooler   Spooler
 	sender    *Sender
 	status    *pct.Status
+	sigChan   chan os.Signal
 }
 
-func NewManager(logger *pct.Logger, dataDir, trashDir, hostname string, client pct.WebsocketClient) *Manager {
+func NewManager(logger *pct.Logger, dataDir, trashDir, hostname string, client pct.WebsocketClient, sigChan chan os.Signal) *Manager {
 	m := &Manager{
 		logger:   logger,
 		dataDir:  dataDir,
@@ -63,8 +64,9 @@ func NewManager(logger *pct.Logger, dataDir, trashDir, hostname string, client p
 		hostname: hostname,
 		client:   client,
 		// --
-		status: pct.NewStatus([]string{"data"}),
-		mux:    &sync.Mutex{},
+		status:  pct.NewStatus([]string{"data"}),
+		mux:     &sync.Mutex{},
+		sigChan: sigChan,
 	}
 	return m
 }
@@ -116,6 +118,7 @@ func (m *Manager) Start() error {
 		m.trashDir,
 		m.hostname,
 		config.Limits,
+		m.sigChan,
 	)
 	if err := spooler.Start(sz); err != nil {
 		return err
