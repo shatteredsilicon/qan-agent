@@ -149,6 +149,19 @@ func main() {
 }
 
 func run(agentConfig *agent.AgentConfig) error {
+	// //////////////////////////////////////////////////////////////////////
+	// Signal handlers
+	// //////////////////////////////////////////////////////////////////////
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	reconnectSigChan := make(chan os.Signal, 1)
+	signal.Notify(reconnectSigChan, syscall.SIGHUP) // kill -HUP PID
+
+	intSigChan := make(chan os.Signal, 1)
+	signal.Notify(intSigChan, syscall.SIGINT) // CTRL-C
+
 	golog.Println("Starting agent...")
 	var stopErr error
 	defer func() {
@@ -249,6 +262,7 @@ func run(agentConfig *agent.AgentConfig) error {
 		pct.Basedir.Dir("trash"),
 		hostname,
 		dataClient,
+		sigChan,
 	)
 	if err := dataManager.Start(); err != nil {
 		return fmt.Errorf("error starting data manager: %s", err)
@@ -318,19 +332,6 @@ func run(agentConfig *agent.AgentConfig) error {
 	}()
 
 	golog.Println("Agent is ready")
-
-	// //////////////////////////////////////////////////////////////////////
-	// Signal handlers
-	// //////////////////////////////////////////////////////////////////////
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	reconnectSigChan := make(chan os.Signal, 1)
-	signal.Notify(reconnectSigChan, syscall.SIGHUP) // kill -HUP PID
-
-	intSigChan := make(chan os.Signal, 1)
-	signal.Notify(intSigChan, syscall.SIGINT) // CTRL-C
 
 	// //////////////////////////////////////////////////////////////////////
 	// Wait for agent stop, signals, etc.
