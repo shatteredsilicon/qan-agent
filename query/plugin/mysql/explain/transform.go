@@ -30,6 +30,7 @@ var (
 	insertRe         = regexp.MustCompile(`(?i)^(?:insert(?:\s+ignore)?|replace)\s+.*?\binto\s+(.*?)\(([^\)]+)\)\s*values?\s*\((.*?)\)\s*(?:\slimit\s|on\s+duplicate\s+key.*)?\s*$`)
 	insertReNoFields = regexp.MustCompile(`(?i)^(?:insert(?:\s+ignore)?|replace)\s+.*?\binto\s+(.*?)\s*values?\s*\((.*?)\)\s*(?:\slimit\s|on\s+duplicate\s+key.*)?\s*$`)
 	insertSetRe      = regexp.MustCompile(`(?i)(?:insert(?:\s+ignore)?|replace)\s+(?:.*?\binto)\s+(.*?)\s*set\s+(.*?)\s*(?:\blimit\b|on\s+duplicate\s+key.*)?\s*$`)
+	setStatementRe   = regexp.MustCompile(`(?i)^set\s+statement\s+(.*?)\bfor\s+(select\s+.*)$`)
 )
 
 func isDMLQuery(query string) bool {
@@ -39,18 +40,19 @@ func isDMLQuery(query string) bool {
 			return true
 		}
 	}
-	return false
+	// some special cases
+	return setStatementRe.Match([]byte(query))
 }
 
 /*
-  MySQL version prior 5.6.3 cannot run explain on DML commands.
-  From the doc: http://dev.mysql.com/doc/refman/5.6/en/explain.html
-  "As of MySQL 5.6.3, permitted explainable statements for EXPLAIN are
-  SELECT, DELETE, INSERT, REPLACE, and UPDATE.
-  Before MySQL 5.6.3, SELECT is the only explainable statement."
+MySQL version prior 5.6.3 cannot run explain on DML commands.
+From the doc: http://dev.mysql.com/doc/refman/5.6/en/explain.html
+"As of MySQL 5.6.3, permitted explainable statements for EXPLAIN are
+SELECT, DELETE, INSERT, REPLACE, and UPDATE.
+Before MySQL 5.6.3, SELECT is the only explainable statement."
 
-  This function converts DML queries to the equivalent SELECT to make
-  it able to explain DML queries on older MySQL versions
+This function converts DML queries to the equivalent SELECT to make
+it able to explain DML queries on older MySQL versions
 */
 func dmlToSelect(query string) string {
 	m := updateRe.FindStringSubmatch(query)
@@ -77,6 +79,11 @@ func dmlToSelect(query string) string {
 	m = insertReNoFields.FindStringSubmatch(query)
 	if len(m) > 2 {
 		return insertToSelectNoFields(m)
+	}
+
+	m = setStatementRe.FindStringSubmatch(query)
+	if len(m) > 1 {
+		return setStatementToSelect(m)
 	}
 
 	return ""
@@ -123,4 +130,8 @@ func insertToSelectNoFields(matches []string) string {
 
 func insertWithSetToSelect(matches []string) string {
 	return fmt.Sprintf("SELECT * FROM %s WHERE %s", matches[1], strings.Replace(matches[2], ",", " AND ", -1))
+}
+
+func setStatementToSelect(matches []string) string {
+	return fmt.Sprintf(matches[2])
 }
