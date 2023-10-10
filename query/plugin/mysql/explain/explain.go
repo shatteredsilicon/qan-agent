@@ -81,7 +81,7 @@ func explain(c mysql.Connector, db, query string, ignoreClassic bool) (*proto.Ex
 	// adjust to make EXPLAIN works
 	s, err := sqlparser.Parse(query)
 	if err != nil {
-		return nil, err
+		return nil, originErr
 	}
 
 	var newQuery string

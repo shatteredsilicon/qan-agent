@@ -64,4 +64,7 @@ func TestDMLToSelect(t *testing.T) {
 
 	q = dmlToSelect("insert into `tabla-1` values(12)")
 	assert.Equal(t, "SELECT * FROM `tabla-1` LIMIT 1", q)
+
+	q = dmlToSelect("set statement max_statement_time=1000 for select 1")
+	assert.Equal(t, "select 1", q)
 }

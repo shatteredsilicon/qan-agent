@@ -109,6 +109,7 @@ func TestExplain(t *testing.T) {
 		testExplainWithoutQuery,
 		testExplainDelete,
 		testExplainInsertSelect,
+		testExplainSetStatement,
 	}
 	t.Run("explain", func(t *testing.T) {
 		for _, f := range tests {
@@ -134,6 +135,102 @@ func testExplainWithoutQuery(t *testing.T, conn mysql.Connector) {
 	isEmptyMessage := strings.Contains(err.Error(), "cannot run EXPLAIN on an empty query example")
 	assert.Equal(t, true, isEmptyMessage)
 
+}
+
+func testExplainSetStatement(t *testing.T, conn mysql.Connector) {
+	db := ""
+	query := "SET STATEMENT max_statement_time=1000 FOR SELECT 1"
+
+	gotExplainResult, err := Explain(conn, db, query, true, false)
+	assert.NoError(t, err)
+
+	expectedJSONQuery := JsonQuery{
+		QueryBlock: QueryBlock{
+			SelectID: 1,
+			Table: &Table{
+				Message: "No tables used",
+			},
+		},
+	}
+	expectedJSON, err := json.MarshalIndent(&expectedJSONQuery, "", "  ")
+	require.NoError(t, err)
+
+	expectedExplainResult := &proto.ExplainResult{
+		Classic: []*proto.ExplainRow{
+			{
+				Id: proto.NullInt64{
+					NullInt64: sql.NullInt64{
+						Int64: 1,
+						Valid: true,
+					},
+				},
+				SelectType: proto.NullString{
+					NullString: sql.NullString{
+						String: "SIMPLE",
+						Valid:  true,
+					},
+				},
+				Table: proto.NullString{
+					NullString: sql.NullString{
+						String: "",
+						Valid:  false,
+					},
+				},
+				Type: proto.NullString{
+					NullString: sql.NullString{
+						String: "",
+						Valid:  false,
+					},
+				},
+				PossibleKeys: proto.NullString{
+					NullString: sql.NullString{
+						String: "",
+						Valid:  false,
+					},
+				},
+				Key: proto.NullString{
+					NullString: sql.NullString{
+						String: "",
+						Valid:  false,
+					},
+				},
+				KeyLen: proto.NullString{
+					NullString: sql.NullString{
+						String: "",
+						Valid:  false,
+					},
+				},
+				Ref: proto.NullString{
+					NullString: sql.NullString{
+						String: "",
+						Valid:  false,
+					},
+				},
+				Rows: proto.NullInt64{
+					NullInt64: sql.NullInt64{
+						Int64: 0,
+						Valid: false,
+					},
+				},
+				Extra: proto.NullString{
+					NullString: sql.NullString{
+						String: "No tables used",
+						Valid:  true,
+					},
+				},
+			},
+		},
+		JSON: string(expectedJSON),
+	}
+
+	jsonSupported, _ := conn.VersionConstraint(">= 5.6.5, < 10.0.0 || >= 10.1.2")
+	if jsonSupported {
+		assert.JSONEq(t, string(expectedJSON), gotExplainResult.JSON)
+	}
+
+	expectedExplainResult.JSON = ""
+	gotExplainResult.JSON = ""
+	assert.Equal(t, expectedExplainResult, gotExplainResult)
 }
 
 func testExplainWithoutDb(t *testing.T, conn mysql.Connector) {
