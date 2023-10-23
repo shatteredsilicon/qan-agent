@@ -285,11 +285,10 @@ SELECT
 		}
 
 		preStmtDoneChan := make(chan error, 1)
-		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan, cfg); err != nil {
-			return
+		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan, cfg); err == nil {
+			err = <-preStmtDoneChan
 		}
 
-		err = <-preStmtDoneChan
 		if errCode, ok := err.(*mysqlDriver.MySQLError); ok && errCode.Number == 1146 {
 			// Ignore if it's a 'table not exists' error to
 			// be compatible with older mysql/mariadb versions
