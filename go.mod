@@ -84,3 +84,5 @@ require (
 	inet.af/netaddr v0.0.0-20220811202034-502d2d690317 // indirect
 	k8s.io/apimachinery v0.20.6 // indirect
 )
+
+replace github.com/go-sql-driver/mysql => github.com/shatteredsilicon/go-sql-driver-mysql v0.0.0-20231031081844-ca087917bf67
