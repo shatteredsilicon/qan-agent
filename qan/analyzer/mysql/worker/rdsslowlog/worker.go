@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -47,12 +48,13 @@ import (
 )
 
 const (
-	safeGapToNextHour     = time.Minute
-	maxFileRecords        = 24 * 30 // 30 days
-	longQueryTimeMultiple = 2
-	rateLmitMaximumTimes  = 2
-	minimumLongQueryTime  = 0.001
-	maxResultSeconds      = 5
+	safeGapToNextHour          = time.Minute
+	maxFileRecords             = 24 * 30 // 30 days
+	longQueryTimeMultiple      = 2
+	rateLmitMaximumTimes       = 2
+	minimumLongQueryTime       = 0.001
+	maxResultSeconds           = 5
+	defaultThrottlingRetention = 7 * 24 * time.Hour // 7 days
 )
 
 var (
@@ -313,7 +315,7 @@ func (w *Worker) Run() (*report.Result, error) {
 			w.ignoreRateLimit = false
 			if !w.hasRateLimitAlert() {
 				w.rateLimitLongQueryTime = lqt
-			} else if lqt >= w.adviceLongQueryTime() {
+			} else if lqt >= w.adviceLongQueryTime() || w.throttlingStateExpired() {
 				w.rateLimitLongQueryTime = lqt
 				w.rateLimitTimestamps = []time.Time{}
 			}
@@ -569,15 +571,6 @@ EVENT_LOOP:
 				}
 
 				now := time.Now().UTC()
-				y, m, d := now.Date()
-				if len(w.rateLimitTimestamps) > 0 &&
-					(w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Year() != y ||
-						w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Month() != m ||
-						w.rateLimitTimestamps[len(w.rateLimitTimestamps)-1].Day() != d) {
-					// re-initialize if the rate limit timestamps are not in the same day
-					w.rateLimitTimestamps = []time.Time{}
-				}
-
 				w.rateLimitTimestamps = append(w.rateLimitTimestamps, now)
 				break
 			}
@@ -756,11 +749,12 @@ func (w Worker) adviceLongQueryTime() float64 {
 
 // Messages returns all messages in response to Messages command
 func (w Worker) Messages() []proto.Message {
-	if w.hasRateLimitAlert() {
+	if w.hasRateLimitAlert() && !w.throttlingStateExpired() {
 		adviceLongQueryTime := w.adviceLongQueryTime()
+		timesP1D, timesP7Ds := w.throttlingCount()
 		return []proto.Message{
 			{
-				Content: fmt.Sprintf("Throttling encountered while harvesting slow query log. Current long_query_time = %s, consider increasing to %s", strconv.FormatFloat(w.rateLimitLongQueryTime, 'f', -1, 64), strconv.FormatFloat(adviceLongQueryTime, 'f', -1, 64)),
+				Content: fmt.Sprintf("Throttling encountered while harvesting slow query log, %d times past 1 day, %d times past 7 days. Current long_query_time = %s, consider increasing to %s", timesP1D, timesP7Ds, strconv.FormatFloat(w.rateLimitLongQueryTime, 'f', -1, 64), strconv.FormatFloat(adviceLongQueryTime, 'f', -1, 64)),
 			},
 		}
 	}
@@ -770,6 +764,36 @@ func (w Worker) Messages() []proto.Message {
 
 func (w Worker) hasRateLimitAlert() bool {
 	return len(w.rateLimitTimestamps) >= rateLmitMaximumTimes
+}
+
+func (w Worker) throttlingCount() (past1Day uint, past7Days uint) {
+	now := time.Now().UTC()
+	for i := range w.rateLimitTimestamps {
+		hours := now.UTC().Sub(w.rateLimitTimestamps[i]).Hours()
+		if hours < 24 {
+			past1Day += 1
+		}
+		if hours < 7*24 {
+			past7Days += 1
+		}
+	}
+	return
+}
+
+func (w Worker) throttlingStateExpired() bool {
+	if len(w.rateLimitTimestamps) == 0 {
+		return false
+	}
+
+	throttlingRetention := defaultThrottlingRetention
+	if os.Getenv("THROTTLING_RETENTION") != "" {
+		retention, _ := time.ParseDuration(os.Getenv("THROTTLING_RETENTION"))
+		if retention > 0 {
+			throttlingRetention = retention
+		}
+	}
+
+	return time.Now().UTC().Sub(w.rateLimitTimestamps[0]) >= throttlingRetention
 }
 
 // boolValue returns the value of the bool pointer passed in or
