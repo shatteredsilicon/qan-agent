@@ -25,13 +25,24 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/util"
 	"github.com/shatteredsilicon/ssm/proto"
+	"vitess.io/vitess/go/vt/sqlparser"
+)
+
+const (
+	MAX_JOIN_DEPTH = 100
 )
 
 func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfoResult, error) {
 	res := make(proto.TableInfoResult)
 
+	createList := append([]proto.Table{}, tables.Create...)
+	indexList := append([]proto.Table{}, tables.Index...)
+	statusList := append([]proto.Table{}, tables.Status...)
+
 	if len(tables.Create) > 0 {
-		for _, t := range tables.Create {
+		for i := 0; i < len(createList); i++ {
+			t := createList[i]
+
 			dbTable := t.Db + "." + t.Table
 			tableInfo, ok := res[dbTable]
 			if !ok {
@@ -51,11 +62,37 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 			}
 			tableInfo.Create = def
 			tableInfo.Type = tableType
+
+			if tableType != proto.TypeDBView {
+				continue
+			}
+
+			// try to get the underlying tables or
+			// views of current view
+			s, err := sqlparser.Parse(def)
+			if err != nil {
+				continue
+			}
+
+			cv, ok := s.(*sqlparser.CreateView)
+			if !ok {
+				continue
+			}
+
+			tables := getTablesFromSelectStmt(cv.Select, 0)
+			for ti := range tables {
+				if tables[ti].Db == "" {
+					tables[ti].Db = t.Db
+				}
+			}
+			createList = append(createList, tables...)
+			indexList = append(indexList, tables...)
+			statusList = append(statusList, tables...)
 		}
 	}
 
 	if len(tables.Index) > 0 {
-		for _, t := range tables.Index {
+		for _, t := range indexList {
 			dbTable := t.Db + "." + t.Table
 			tableInfo, ok := res[dbTable]
 			if !ok {
@@ -81,7 +118,7 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 	}
 
 	if len(tables.Status) > 0 {
-		for _, t := range tables.Status {
+		for _, t := range statusList {
 			dbTable := t.Db + "." + t.Table
 			tableInfo, ok := res[dbTable]
 			if !ok {
@@ -267,4 +304,98 @@ func showStatus(c mysql.Connector, db, table string) (*proto.ShowTableStatus, er
 	}
 
 	return &status, nil
+}
+
+func getTablesFromSelectStmt(ss sqlparser.SelectStatement, depth uint) (sTables []proto.Table) {
+	if depth > MAX_JOIN_DEPTH {
+		return nil
+	}
+	depth++
+
+	switch t := ss.(type) {
+	case *sqlparser.Select:
+		sTables = append(sTables, getTablesFromTableExprs(sqlparser.TableExprs(t.From))...)
+	case *sqlparser.Union:
+		sTables = append(sTables, getTablesFromSelectStmt(t.Left, depth)...)
+		sTables = append(sTables, getTablesFromSelectStmt(t.Right, depth)...)
+	}
+
+	return sTables
+}
+
+func getTablesFromTableExprs(tes sqlparser.TableExprs) (tables []proto.Table) {
+	for _, te := range tes {
+		tables = append(tables, getTablesFromTableExpr(te, 0)...)
+	}
+	return tables
+}
+
+func getTablesFromTableExpr(te sqlparser.TableExpr, depth uint) (tables []proto.Table) {
+	if depth > MAX_JOIN_DEPTH {
+		return nil
+	}
+
+	depth++
+	switch a := te.(type) {
+	case *sqlparser.AliasedTableExpr:
+		switch a.Expr.(type) {
+		case sqlparser.TableName:
+			t := a.Expr.(sqlparser.TableName)
+			db := t.Qualifier.String()
+			tbl := parseTableName(t.Name.String())
+			if db != "" || tbl != "" {
+				table := proto.Table{
+					Db:    db,
+					Table: tbl,
+				}
+				tables = append(tables, table)
+			}
+		case *sqlparser.DerivedTable:
+			tables = append(tables, getTablesFromSelectStmt(a.Expr.(*sqlparser.DerivedTable).Select, depth)...)
+		}
+
+	case *sqlparser.JoinTableExpr:
+		// This case happens for JOIN clauses. It recurses to the bottom
+		// of the tree via the left expressions, then it unwinds. E.g. with
+		// "a JOIN b JOIN c" the tree is:
+		//
+		//  Left			Right
+		//  a     b      c	AliasedTableExpr (case above)
+		//  |     |      |
+		//  +--+--+      |
+		//     |         |
+		//    t2----+----+	JoinTableExpr
+		//          |
+		//        var t (t @ depth=1) JoinTableExpr
+		//
+		// Code will go left twice to arrive at "a". Then it will unwind and
+		// store the right-side values: "b" then "c". Because of this, if
+		// MAX_JOIN_DEPTH is reached, we lose the whole tree because if we take
+		// the existing right-side tables, we'll generate a misleading partial
+		// list of tables, e.g. "SELECT b c".
+		tables = append(tables, getTablesFromTableExpr(a.LeftExpr, depth)...)
+		tables = append(tables, getTablesFromTableExpr(a.RightExpr, depth)...)
+
+	case *sqlparser.ParenTableExpr:
+		tables = append(tables, getTablesFromTableExprs(a.Exprs)...)
+	}
+
+	return tables
+}
+
+func parseTableName(tableName string) string {
+	// https://dev.mysql.com/doc/refman/5.7/en/select.html#idm140358784149168
+	// You are permitted to specify DUAL as a dummy table name in situations where no tables are referenced:
+	//
+	// ```
+	// mysql> SELECT 1 + 1 FROM DUAL;
+	//         -> 2
+	// ```
+	// DUAL is purely for the convenience of people who require that all SELECT statements
+	// should have FROM and possibly other clauses. MySQL may ignore the clauses.
+	// MySQL does not require FROM DUAL if no tables are referenced.
+	if tableName == "dual" {
+		tableName = ""
+	}
+	return tableName
 }
