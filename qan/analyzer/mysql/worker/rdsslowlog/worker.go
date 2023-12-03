@@ -56,12 +56,10 @@ const (
 )
 
 var (
-	// ErrUnknownRDSLogOutput unknown rds parameter log_output value
-	ErrUnknownRDSLogOutput = errors.New("value of rds parameter log_output is unknown")
-	// ErrRDSSlowlogDisabled slow log disabled error
-	ErrRDSSlowlogDisabled = errors.New("slow log of rds is disabled")
-	// ErrUnknownRDSSlowlogFile unknown rds slow log file value
-	ErrUnknownRDSSlowlogFile = errors.New("slow log file of rds is unknown")
+	// ErrUnexpectedLogOutput unexpected @@log_output value
+	ErrUnexpectedLogOutput = errors.New("@@log_output is not 'FILE'")
+	// ErrSlowlogDisabled slow log disabled error
+	ErrSlowlogDisabled = errors.New("slow log of rds is disabled")
 )
 
 var (
@@ -146,7 +144,6 @@ type Worker struct {
 	LastWritten            *int64
 	fileRecords            map[string]*fileRecord
 	resultChan             chan *report.Result
-	ignoreRateLimit        bool        // wether to ignore rate limit error or not
 	rateLimitLongQueryTime float64     // stores the long_query_time value at the moment that rate limit happened
 	rateLimitTimestamps    []time.Time // stores the timestamps when the historical rate limit happened
 	lastStartTime          time.Time
@@ -271,63 +268,54 @@ func (w *Worker) Run() (*report.Result, error) {
 		w.running = false
 	}()
 
+	w.status.Update(w.name, "Connecting to MySQL")
+	if err := w.mysqlConn.Connect(); err != nil {
+		w.logger.Warn(err.Error())
+		return nil, err // not an error to caller
+	}
+	defer w.mysqlConn.Close()
+
 	// check if slow query log is enabled
-	enabled, err := w.rds.GetParam("slow_query_log")
+	var slowQueryLog bool
+	var logOutput, logFile string
+	var logQueryTime float64
+	err := w.mysqlConn.DB().QueryRow("SELECT @@slow_query_log").Scan(&slowQueryLog)
 	if err != nil {
 		return nil, err
 	}
-	if enabled.ParameterValue == nil || *enabled.ParameterValue != rds.TrueParamValue {
-		return nil, ErrRDSSlowlogDisabled
+	if !slowQueryLog {
+		return nil, ErrSlowlogDisabled
 	}
 
-	slowLogFile, err := w.rds.GetParam("slow_query_log_file")
+	err = w.mysqlConn.DB().QueryRow("SELECT @@slow_query_log_file").Scan(&logFile)
 	if err != nil {
 		return nil, err
-	}
-	if slowLogFile.ParameterValue == nil {
-		return nil, ErrUnknownRDSSlowlogFile
 	}
 
-	// check if slow query log output to file or table
-	logOutput, err := w.rds.GetParam("log_output")
+	// check if slow query log output to file
+	err = w.mysqlConn.DB().QueryRow("SELECT @@log_output").Scan(&logOutput)
 	if err != nil {
 		return nil, err
 	}
-	if logOutput.ParameterValue == nil {
-		return nil, ErrUnknownRDSLogOutput
+	if logOutput != "FILE" {
+		return nil, ErrUnexpectedLogOutput
 	}
 
-	longQueryTime, err := w.rds.GetParam("long_query_time")
+	err = w.mysqlConn.DB().QueryRow("SELECT @@long_query_time").Scan(&logQueryTime)
 	if err != nil {
 		return nil, err
 	}
-	if longQueryTime.ParameterValue == nil {
-		w.logger.Warn("Got an empty long_query_time value")
-		w.ignoreRateLimit = true
-	} else {
-		lqt, err := strconv.ParseFloat(*longQueryTime.ParameterValue, 64)
-		if err != nil {
-			w.logger.Warn("Got an invalid long_query_time value: ", *longQueryTime.ParameterValue)
-			w.ignoreRateLimit = true
-		} else {
-			w.ignoreRateLimit = false
-			if !w.hasRateLimitAlert() {
-				w.rateLimitLongQueryTime = lqt
-			} else if lqt >= w.adviceLongQueryTime() {
-				w.rateLimitLongQueryTime = lqt
-				w.rateLimitTimestamps = []time.Time{}
-			}
-		}
+	if !w.hasRateLimitAlert() {
+		w.rateLimitLongQueryTime = logQueryTime
+	} else if logQueryTime >= w.adviceLongQueryTime() {
+		w.rateLimitLongQueryTime = logQueryTime
+		w.rateLimitTimestamps = []time.Time{}
 	}
+
+	w.mysqlConn.Close()
 
 	var result *report.Result
-	switch *logOutput.ParameterValue {
-	case rds.FILEParamValue:
-		result, stopped, err = w.runFiles(*slowLogFile.ParameterValue)
-	default:
-		return nil, ErrUnknownRDSLogOutput
-	}
-
+	result, stopped, err = w.runFiles(logFile)
 	return result, err
 }
 
@@ -558,7 +546,7 @@ EVENT_LOOP:
 				w.logger.Error(fmt.Sprintf("downloading rds log file %s failed: %+v", *file.LogFileName, err))
 
 				awsErr, ok := err.(awserr.Error)
-				if !ok || w.ignoreRateLimit || w.hasRateLimitAlert() {
+				if !ok || w.hasRateLimitAlert() {
 					break
 				}
 
