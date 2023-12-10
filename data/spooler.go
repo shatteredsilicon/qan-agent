@@ -19,7 +19,6 @@ package data
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -40,7 +39,14 @@ const (
 	CACHE_SIZE   = 1024 * 1024 * 8 // 8M
 )
 
-var ErrSpoolTimeout = errors.New("Timeout spooling data")
+type SpoolerStatus uint
+
+const (
+	SpoolerStatusStopped SpoolerStatus = iota
+	SpoolerStatusWaiting
+	SpoolerStatusWriting
+	SpoolerStatusPurging
+)
 
 type Spooler interface {
 	Start(proto.Serializer) error
@@ -77,6 +83,7 @@ type DiskvSpooler struct {
 	purgeChan              chan time.Time
 	sigChan                chan os.Signal
 	continuouslyDiskErrors uint
+	spoolerStatus          SpoolerStatus
 }
 
 func NewDiskvSpooler(logger *pct.Logger, dataDir, trashDir, hostname string, limits pc.DataSpoolLimits, sigChan chan os.Signal) *DiskvSpooler {
@@ -87,12 +94,13 @@ func NewDiskvSpooler(logger *pct.Logger, dataDir, trashDir, hostname string, lim
 		hostname: hostname,
 		limits:   limits,
 		// --
-		dataChan: make(chan *proto.Data, WRITE_BUFFER),
-		sync:     pct.NewSyncChan(),
-		status:   pct.NewStatus([]string{"data-spooler", "data-spooler-count", "data-spooler-size", "data-spooler-oldest"}),
-		mux:      new(sync.Mutex),
-		fileSize: make(map[string]int),
-		sigChan:  sigChan,
+		dataChan:      make(chan *proto.Data, WRITE_BUFFER),
+		sync:          pct.NewSyncChan(),
+		status:        pct.NewStatus([]string{"data-spooler", "data-spooler-count", "data-spooler-size", "data-spooler-oldest"}),
+		mux:           new(sync.Mutex),
+		fileSize:      make(map[string]int),
+		sigChan:       sigChan,
+		spoolerStatus: SpoolerStatusStopped,
 	}
 	return s
 }
@@ -169,6 +177,7 @@ func (s *DiskvSpooler) Stop() error {
 	s.sz = nil
 	s.cache = nil
 	s.logger.Info("Stopped")
+	s.spoolerStatus = SpoolerStatusStopped
 	return nil
 }
 
@@ -218,15 +227,17 @@ func (s *DiskvSpooler) Write(service string, data interface{}) error {
 	case s.dataChan <- protoData:
 		s.continuouslyDiskErrors = 0
 	case <-time.After(1 * time.Second):
+		err := fmt.Errorf("timeout spooling data, current spool status: %d, length of pending protoData to write: %d", s.spoolerStatus, len(s.dataChan))
+
 		s.continuouslyDiskErrors++
 		if s.continuouslyDiskErrors > 3 {
 			s.sigChan <- syscall.SIGTERM
-			return ErrSpoolTimeout
+			return err
 		}
 
 		// Let caller decide what to do.
 		s.logger.Debug("write:timeout")
-		return ErrSpoolTimeout
+		return err
 	}
 
 	return nil
@@ -310,6 +321,7 @@ func (s *DiskvSpooler) run() {
 			s.status.Update("data-spooler", "Crashed")
 		}
 		s.sync.Done()
+		s.spoolerStatus = SpoolerStatusStopped
 	}()
 
 	var purgeTicker *time.Ticker
@@ -323,12 +335,14 @@ func (s *DiskvSpooler) run() {
 
 	for {
 		s.status.Update("data-spooler", "Idle")
+		s.spoolerStatus = SpoolerStatusWaiting
 		select {
 		case protoData := <-s.dataChan:
 			ts := protoData.Created.UnixNano()
 			key := fmt.Sprintf("%s_%d", protoData.Service, ts)
 			s.logger.Debug("run:spool:" + key)
 			s.status.Update("data-spooler", "Spooling "+key)
+			s.spoolerStatus = SpoolerStatusWriting
 
 			bytes, err := json.Marshal(protoData)
 			if err != nil {
@@ -348,6 +362,10 @@ func (s *DiskvSpooler) run() {
 			}
 			s.mux.Unlock()
 		case <-purgeChan:
+			s.status.Update("data-spooler", "Purging")
+			s.logger.Debug("data-spooler purging")
+			s.spoolerStatus = SpoolerStatusPurging
+
 			n, removed := s.purge(time.Now().UTC(), s.limits)
 			if n == 0 {
 				continue
@@ -370,6 +388,10 @@ func (s *DiskvSpooler) run() {
 				}
 			}
 		case <-s.sync.StopChan:
+			s.status.Update("data-spooler", "Stopped")
+			s.logger.Debug("data-spooler stopped")
+			s.spoolerStatus = SpoolerStatusPurging
+
 			s.sync.Graceful()
 			return
 		}
