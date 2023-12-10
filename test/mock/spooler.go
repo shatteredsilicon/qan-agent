@@ -59,7 +59,7 @@ func (s *Spooler) Write(service string, data interface{}) error {
 	return nil
 }
 
-func (s *Spooler) Files() <-chan string {
+func (s *Spooler) Files(cancel <-chan struct{}) <-chan string {
 	filesChan := make(chan string)
 	go func() {
 		for _, file := range s.FilesOut {
@@ -68,9 +68,6 @@ func (s *Spooler) Files() <-chan string {
 		close(filesChan)
 	}()
 	return filesChan
-}
-
-func (s *Spooler) CancelFiles() {
 }
 
 func (s *Spooler) Read(file string) ([]byte, error) {

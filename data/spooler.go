@@ -18,6 +18,7 @@
 package data
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -53,8 +54,7 @@ type Spooler interface {
 	Stop() error
 	Status() map[string]string
 	Write(service string, data interface{}) error
-	Files() <-chan string
-	CancelFiles()
+	Files(cancel <-chan struct{}) <-chan string
 	Read(file string) ([]byte, error)
 	Remove(file string) error
 	Reject(file string) error
@@ -79,7 +79,6 @@ type DiskvSpooler struct {
 	size                   uint64
 	oldest                 int64
 	fileSize               map[string]int
-	cancelChan             chan struct{}
 	purgeChan              chan time.Time
 	sigChan                chan os.Signal
 	continuouslyDiskErrors uint
@@ -139,7 +138,7 @@ func (s *DiskvSpooler) Start(sz proto.Serializer) error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	s.oldest = time.Now().UTC().UnixNano()
-	for key := range s.Files() {
+	for key := range s.Files(context.Background().Done()) {
 		data, err := s.cache.Read(key)
 		if err != nil {
 			s.logger.Error("Cannot read data file", key, ":", err)
@@ -243,15 +242,8 @@ func (s *DiskvSpooler) Write(service string, data interface{}) error {
 	return nil
 }
 
-func (s *DiskvSpooler) Files() <-chan string {
-	s.cancelChan = make(chan struct{})
-	return s.cache.Keys(s.cancelChan)
-}
-
-func (s *DiskvSpooler) CancelFiles() {
-	if s.cancelChan != nil {
-		close(s.cancelChan)
-	}
+func (s *DiskvSpooler) Files(cancel <-chan struct{}) <-chan string {
+	return s.cache.Keys(cancel)
 }
 
 func (s *DiskvSpooler) Read(file string) ([]byte, error) {
@@ -439,8 +431,7 @@ func (s *DiskvSpooler) purge(now time.Time, limits pc.DataSpoolLimits) (int, map
 	n := 0
 	nowNano := now.UnixNano()
 
-	defer s.CancelFiles()
-	for file := range s.Files() {
+	for file := range s.Files(context.Background().Done()) {
 		// File names have the format <service>_<nano unix ts>. Get the ts and
 		// convert it to seconds from the given now.
 		ts, err := s.ts(file)
@@ -480,7 +471,7 @@ func (s *DiskvSpooler) updateStats() {
 	s.count = 0
 	s.size = 0
 	s.oldest = time.Now().UTC().UnixNano()
-	for key := range s.Files() {
+	for key := range s.Files(context.Background().Done()) {
 		data, err := s.cache.Read(key)
 		if err != nil {
 			s.logger.Error("Cannot read data file", key, ":", err)

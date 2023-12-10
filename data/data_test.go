@@ -20,6 +20,7 @@ package data_test
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -103,7 +104,7 @@ func (s *DiskvSpoolerTestSuite) TestSpoolData(t *C) {
 	sz := proto.NewJsonSerializer()
 
 	// Create and start the spooler.
-	spool := data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", s.limits)
+	spool := data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", s.limits, make(chan os.Signal))
 	if spool == nil {
 		t.Fatal("NewDiskvSpooler")
 	}
@@ -130,7 +131,7 @@ func (s *DiskvSpoolerTestSuite) TestSpoolData(t *C) {
 	}
 
 	gotFiles := []string{}
-	filesChan := spool.Files()
+	filesChan := spool.Files(context.Background().Done())
 	for file := range filesChan {
 		gotFiles = append(gotFiles, file)
 	}
@@ -181,7 +182,7 @@ func (s *DiskvSpoolerTestSuite) TestSpoolGzipData(t *C) {
 	sz := proto.NewJsonGzipSerializer()
 
 	// See TestSpoolData() for description of these tasks.
-	spool := data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", s.limits)
+	spool := data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", s.limits, make(chan os.Signal))
 	if spool == nil {
 		t.Fatal("NewDiskvSpooler")
 	}
@@ -206,7 +207,7 @@ func (s *DiskvSpoolerTestSuite) TestSpoolGzipData(t *C) {
 	}
 
 	gotFiles := []string{}
-	filesChan := spool.Files()
+	filesChan := spool.Files(context.Background().Done())
 	for file := range filesChan {
 		gotFiles = append(gotFiles, file)
 	}
@@ -259,7 +260,7 @@ func (s *DiskvSpoolerTestSuite) TestSpoolGzipData(t *C) {
 	}
 
 	gotFiles = []string{}
-	filesChan = spool.Files()
+	filesChan = spool.Files(context.Background().Done())
 	for file := range filesChan {
 		gotFiles = append(gotFiles, file)
 	}
@@ -300,7 +301,7 @@ func (s *DiskvSpoolerTestSuite) TestRejectData(t *C) {
 	sz := proto.NewJsonSerializer()
 
 	// Create and start the spooler.
-	spool := data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", s.limits)
+	spool := data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", s.limits, make(chan os.Signal))
 	t.Assert(spool, NotNil)
 
 	err := spool.Start(sz)
@@ -328,7 +329,7 @@ func (s *DiskvSpoolerTestSuite) TestRejectData(t *C) {
 
 	// Get the file name the spooler saved the data as.
 	gotFiles := []string{}
-	filesChan := spool.Files()
+	filesChan := spool.Files(context.Background().Done())
 	for file := range filesChan {
 		gotFiles = append(gotFiles, file)
 	}
@@ -353,7 +354,7 @@ func (s *DiskvSpoolerTestSuite) TestRejectData(t *C) {
 	 * that the spooler does not read/index/cache bad files.
 	 */
 
-	spool = data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", s.limits)
+	spool = data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", s.limits, make(chan os.Signal))
 	t.Assert(spool, NotNil)
 	err = spool.Start(sz)
 	t.Assert(err, IsNil)
@@ -363,7 +364,7 @@ func (s *DiskvSpoolerTestSuite) TestRejectData(t *C) {
 
 	// There should only be 1 new file in the spool.
 	gotFiles = []string{}
-	filesChan = spool.Files()
+	filesChan = spool.Files(context.Background().Done())
 	for file := range filesChan {
 		t.Check(file, Not(Equals), badFile)
 		gotFiles = append(gotFiles, file)
@@ -381,7 +382,7 @@ func (s *DiskvSpoolerTestSuite) TestSpoolLimits(t *C) {
 	}
 
 	sz := proto.NewJsonSerializer()
-	spool := data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", limits)
+	spool := data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", limits, make(chan os.Signal))
 	t.Assert(spool, NotNil)
 	err := spool.Start(sz)
 	t.Assert(err, IsNil)
@@ -413,7 +414,7 @@ func (s *DiskvSpoolerTestSuite) TestSpoolLimits(t *C) {
 
 	// Find out how large the files are so we can purge based on MaxSize.
 	totalSize := 0
-	for file := range spool.Files() {
+	for file := range spool.Files(context.Background().Done()) {
 		data, err := spool.Read(file)
 		t.Assert(err, IsNil)
 		totalSize += len(data)
@@ -461,7 +462,7 @@ func (s *DiskvSpoolerTestSuite) TestSpoolLimits(t *C) {
 		MaxSize:  1024, // bytes
 		MaxFiles: 2,
 	}
-	spool = data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", limits)
+	spool = data.NewDiskvSpooler(s.logger, s.dataDir, s.trashDir, "localhost", limits, make(chan os.Signal))
 	t.Assert(spool, NotNil)
 
 	purgeChan := make(chan time.Time, 1)
@@ -893,7 +894,7 @@ func (s *ManagerTestSuite) TearDownSuite(t *C) {
 // --------------------------------------------------------------------------
 
 func (s *ManagerTestSuite) TestGetConfig(t *C) {
-	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client)
+	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client, make(chan os.Signal))
 	t.Assert(m, NotNil)
 
 	config := &pc.Data{
@@ -1006,7 +1007,7 @@ func (s *ManagerTestSuite) TestGetConfig(t *C) {
 }
 
 func (s *ManagerTestSuite) TestSetConfig(t *C) {
-	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client)
+	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client, make(chan os.Signal))
 	t.Assert(m, NotNil)
 
 	config := pc.Data{
@@ -1151,7 +1152,7 @@ func (s *ManagerTestSuite) TestSetConfig(t *C) {
 
 func (s *ManagerTestSuite) TestStatus(t *C) {
 	// Start a data manager.
-	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client)
+	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client, make(chan os.Signal))
 	t.Assert(m, NotNil)
 	config := &pc.Data{
 		Encoding:     "gzip",

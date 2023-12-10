@@ -18,6 +18,7 @@
 package data
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -181,8 +182,7 @@ func (s *Sender) send() {
 }
 
 func (s *Sender) sendAllFiles(startTime time.Time, sent *SentInfo) error {
-	defer s.spool.CancelFiles()
-	for file := range s.spool.Files() {
+	for file := range s.spool.Files(context.Background().Done()) {
 		s.logger.Debug("send:" + file)
 
 		// Check runtime, don't send forever.
