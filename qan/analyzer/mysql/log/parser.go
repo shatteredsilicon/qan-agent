@@ -157,7 +157,7 @@ SCANNER_LOOP:
 		if err != nil {
 			// file reader r/p.reader is passed by the caller, if it's a
 			// 'file already closed' error, we should exit gracefully
-			if err != io.EOF && errors.Is(err, fs.ErrClosed) {
+			if err != io.EOF && !errors.Is(err, fs.ErrClosed) {
 				return err
 			}
 			break SCANNER_LOOP
