@@ -33,8 +33,10 @@ package log
 import (
 	"bufio"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	l "log"
 	"os"
 	"reflect"
@@ -153,7 +155,9 @@ SCANNER_LOOP:
 
 		line, err := r.ReadString('\n')
 		if err != nil {
-			if err != io.EOF {
+			// file reader r/p.reader is passed by the caller, if it's a
+			// 'file already closed' error, we should exit gracefully
+			if err != io.EOF && errors.Is(err, fs.ErrClosed) {
 				return err
 			}
 			break SCANNER_LOOP
