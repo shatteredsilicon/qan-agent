@@ -1,15 +1,17 @@
 package profiler
 
 import (
+	"context"
 	"testing"
 	"time"
 
-	"github.com/percona/pmgo"
 	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/test/mock"
@@ -26,8 +28,8 @@ func TestCollectingAndSendingData(t *testing.T) {
 
 	// Create dependencies.
 	serviceName := "plugin"
-	dialer := pmgo.NewDialer()
-	dialInfo, _ := pmgo.ParseURL("")
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI("").SetServerAPIOptions(serverAPI)
 	logChan := make(chan proto.LogEntry)
 	logger := pct.NewLogger(logChan, serviceName)
 	dataChan := make(chan interface{})
@@ -39,7 +41,7 @@ func TestCollectingAndSendingData(t *testing.T) {
 		Interval:       5, // seconds
 		ExampleQueries: &exampleQueries,
 	}
-	plugin := New(dialInfo, dialer, logger, spool, qanConfig)
+	plugin := New(mongoOpts, logger, spool, qanConfig)
 
 	assert.Empty(t, plugin.Status())
 	err = plugin.Start()
@@ -52,10 +54,10 @@ func TestCollectingAndSendingData(t *testing.T) {
 		{"name": "Carlos"},
 	}
 	// Add data through separate connection.
-	session, err := dialer.DialWithInfo(dialInfo)
+	client, err := mongo.Connect(context.TODO(), mongoOpts)
 	require.NoError(t, err)
 	for _, person := range people {
-		err = session.DB("").C("people").Insert(&person)
+		_, err = client.Database("").Collection("people").InsertOne(context.TODO(), &person)
 		require.NoError(t, err)
 	}
 

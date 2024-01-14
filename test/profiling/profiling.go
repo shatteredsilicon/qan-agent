@@ -18,53 +18,56 @@
 package profiling
 
 import (
+	"context"
 	"fmt"
-	"github.com/percona/pmgo"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
-type run func(session pmgo.SessionManager) error
-type runDB func(session pmgo.SessionManager, dbname string) error
+type run func(client *mongo.Client) error
+type runDB func(client *mongo.Client, dbname string) error
 
 type Profiling struct {
-	url     string
-	session pmgo.SessionManager
-	err     error
+	url    string
+	client *mongo.Client
+	err    error
 }
 
 func New(url string) *Profiling {
 	p := &Profiling{
 		url: url,
 	}
-	p.session, p.err = createSession(url)
+	p.client, p.err = createClient(url)
 	return p
 }
 
 func (p *Profiling) Enable(dbname string) error {
-	return p.Run(func(session pmgo.SessionManager) error {
-		return profile(session.DB(dbname), 2)
+	return p.Run(func(client *mongo.Client) error {
+		return profile(client.Database(dbname), 2)
 	})
 }
 
 func (p *Profiling) Disable(dbname string) error {
-	return p.Run(func(session pmgo.SessionManager) error {
-		return profile(session.DB(dbname), 0)
+	return p.Run(func(client *mongo.Client) error {
+		return profile(client.Database(dbname), 0)
 	})
 }
 
 func (p *Profiling) Drop(dbname string) error {
-	return p.Run(func(session pmgo.SessionManager) error {
+	return p.Run(func(client *mongo.Client) error {
 		if !p.Exist(dbname) {
 			return nil
 		}
-		return session.DB(dbname).C("system.profile").DropCollection()
+		return client.Database(dbname).Collection("system.profile").Drop(context.Background())
 	})
 }
 
 func (p *Profiling) Exist(dbnameToLook string) bool {
 	found := fmt.Errorf("found db: %s", dbnameToLook)
-	err := p.RunDB(func(session pmgo.SessionManager, dbname string) error {
+	err := p.RunDB(func(client *mongo.Client, dbname string) error {
 		if dbnameToLook == dbname {
 			return found
 		}
@@ -91,19 +94,19 @@ func (p *Profiling) Reset(dbname string) error {
 }
 
 func (p *Profiling) EnableAll() error {
-	return p.RunDB(func(session pmgo.SessionManager, dbname string) error {
+	return p.RunDB(func(client *mongo.Client, dbname string) error {
 		return p.Enable(dbname)
 	})
 }
 
 func (p *Profiling) DisableAll() error {
-	return p.RunDB(func(session pmgo.SessionManager, dbname string) error {
+	return p.RunDB(func(client *mongo.Client, dbname string) error {
 		return p.Disable(dbname)
 	})
 }
 
 func (p *Profiling) DropAll() error {
-	return p.RunDB(func(session pmgo.SessionManager, dbname string) error {
+	return p.RunDB(func(client *mongo.Client, dbname string) error {
 		return p.Drop(dbname)
 	})
 }
@@ -125,20 +128,18 @@ func (p *Profiling) Run(f run) error {
 	if p.err != nil {
 		return p.err
 	}
-	session := p.session.Copy()
-	defer session.Close()
 
-	return f(session)
+	return f(p.client)
 }
 
 func (p *Profiling) RunDB(f runDB) error {
-	return p.Run(func(session pmgo.SessionManager) error {
-		databases, err := session.DatabaseNames()
+	return p.Run(func(client *mongo.Client) error {
+		databases, err := client.ListDatabaseNames(context.Background(), bson.D{})
 		if err != nil {
 			return err
 		}
 		for _, dbname := range databases {
-			err := f(session, dbname)
+			err := f(client, dbname)
 			if err != nil {
 				return err
 			}
@@ -149,37 +150,30 @@ func (p *Profiling) RunDB(f runDB) error {
 
 // DatabaseNames returns the names of non-empty databases present in the cluster.
 func (p *Profiling) DatabaseNames() ([]string, error) {
-	return p.session.DatabaseNames()
+	return p.client.ListDatabaseNames(context.Background(), bson.D{})
 }
 
-func profile(db pmgo.DatabaseManager, v int) error {
+func profile(db *mongo.Database, v int) error {
 	result := struct {
 		Was       int
 		Slowms    int
 		Ratelimit int
 	}{}
-	return db.Run(
-		bson.M{
-			"profile": v,
-		},
-		&result,
-	)
+	return db.RunCommand(context.Background(), bson.D{{"profile", v}}).Decode(&result)
 }
 
-func createSession(url string) (pmgo.SessionManager, error) {
-	dialInfo, err := pmgo.ParseURL(url)
+func createClient(url string) (*mongo.Client, error) {
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI(url)
+	if err := mongoOpts.Validate(); err != nil {
+		return nil, err
+	}
+	mongoOpts.SetServerAPIOptions(serverAPI).SetReadPreference(readpref.Nearest())
+
+	client, err := mongo.Connect(context.TODO(), mongoOpts)
 	if err != nil {
 		return nil, err
 	}
-	dialer := pmgo.NewDialer()
 
-	// Disable automatic replicaSet detection, connect directly to specified server
-	dialInfo.Direct = true
-	session, err := dialer.DialWithInfo(dialInfo)
-	if err != nil {
-		return nil, err
-	}
-
-	session.SetMode(mgo.Eventual, true)
-	return session, nil
+	return client, nil
 }

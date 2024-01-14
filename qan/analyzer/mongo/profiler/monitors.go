@@ -1,11 +1,13 @@
 package profiler
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
 
-	"github.com/percona/pmgo"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 const (
@@ -15,16 +17,16 @@ const (
 )
 
 type newMonitor func(
-	session pmgo.SessionManager,
+	client *mongo.Client,
 	dbName string,
 ) *monitor
 
 func NewMonitors(
-	session pmgo.SessionManager,
+	client *mongo.Client,
 	newMonitor newMonitor,
 ) *monitors {
 	return &monitors{
-		session:    session,
+		client:     client,
 		newMonitor: newMonitor,
 		monitors:   map[string]*monitor{},
 	}
@@ -32,7 +34,7 @@ func NewMonitors(
 
 type monitors struct {
 	// dependencies
-	session    pmgo.SessionManager
+	client     *mongo.Client
 	newMonitor newMonitor
 
 	// monitors
@@ -42,9 +44,9 @@ type monitors struct {
 	sync.RWMutex // Lock() to protect internal consistency of the service
 }
 
-func (self *monitors) MonitorAll() error {
+func (self *monitors) MonitorAll(ctx context.Context) error {
 	databases := map[string]struct{}{}
-	databasesSlice, err := self.listDatabases()
+	databasesSlice, err := self.listDatabases(ctx)
 	if err != nil {
 		return err
 	}
@@ -66,7 +68,7 @@ func (self *monitors) MonitorAll() error {
 
 		// if database is not monitored yet then we need to create new monitor
 		m := self.newMonitor(
-			self.session,
+			self.client,
 			dbName,
 		)
 		// ... and start it
@@ -127,8 +129,6 @@ func (self *monitors) GetAll() map[string]*monitor {
 	return list
 }
 
-func (self *monitors) listDatabases() ([]string, error) {
-	session := self.session.Copy()
-	defer session.Close()
-	return session.DatabaseNames()
+func (self *monitors) listDatabases(ctx context.Context) ([]string, error) {
+	return self.client.ListDatabaseNames(ctx, bson.D{})
 }

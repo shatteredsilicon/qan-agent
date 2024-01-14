@@ -18,14 +18,14 @@
 package summary
 
 import (
-	"github.com/percona/pmgo"
 	"github.com/shatteredsilicon/qan-agent/pct/cmd"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Summary executes `pt-mongodb-summary` for given dsn
 func Summary(dsn string) (string, error) {
-	dialInfo, err := pmgo.ParseURL(dsn)
-	if err != nil {
+	opts := options.Client().ApplyURI(dsn)
+	if err := opts.Validate(); err != nil {
 		return "", err
 	}
 
@@ -33,9 +33,9 @@ func Summary(dsn string) (string, error) {
 
 	args := []string{}
 	// add username, password and auth database e.g. `pt-mongodb-summary -u admin -p admin -a admin`
-	args = append(args, authArgs(dialInfo.Username, dialInfo.Password, dialInfo.Source)...)
+	args = append(args, authArgs(opts.Auth.Username, opts.Auth.Password, opts.Auth.AuthSource)...)
 	// add host[:port] e.g. `pt-mongodb-summary localhost:27017`
-	args = append(args, addrArgs(dialInfo.Addrs)...)
+	args = append(args, addrArgs(opts.Hosts)...)
 
 	return cmd.NewRealCmd(name, args...).Run()
 }

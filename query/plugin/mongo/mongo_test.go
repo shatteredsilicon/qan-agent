@@ -24,7 +24,7 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func TestHandle(t *testing.T) {
@@ -86,7 +86,8 @@ func TestHandle(t *testing.T) {
 				// unpack data
 				explainResult := data.(*proto.ExplainResult)
 				got := bson.M{}
-				err = bson.UnmarshalJSON([]byte(explainResult.JSON), &got)
+				err = bson.UnmarshalExtJSON([]byte(explainResult.JSON), true, &got)
+				require.NoError(t, err)
 
 				// check structure of the result
 				assert.NotEmpty(t, got["executionStats"])
