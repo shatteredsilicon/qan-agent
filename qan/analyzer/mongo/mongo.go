@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/percona/pmgo"
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo"
 )
 
 func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
@@ -71,18 +72,17 @@ func (m *MongoAnalyzer) Start() error {
 	}
 
 	// get the dsn from instance
-	dsn := m.protoInstance.DSN
+	dsn := mongo.FixDSN(m.protoInstance.DSN)
 
 	// if dsn is incorrect we should exit immediately as this is not gonna correct itself
-	dialInfo, err := pmgo.ParseURL(dsn)
-	if err != nil {
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI(dsn).SetServerAPIOptions(serverAPI)
+	if err := mongoOpts.Validate(); err != nil {
 		return err
 	}
-	dialer := pmgo.NewDialer()
 
 	m.profiler = profiler.New(
-		dialInfo,
-		dialer,
+		mongoOpts,
 		m.logger,
 		m.spool,
 		m.config,

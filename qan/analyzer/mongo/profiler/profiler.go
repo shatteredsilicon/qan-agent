@@ -1,13 +1,17 @@
 package profiler
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/percona/pmgo"
+	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -16,32 +20,29 @@ import (
 )
 
 func New(
-	dialInfo *pmgo.DialInfo,
-	dialer pmgo.Dialer,
+	mongoOpts *options.ClientOptions,
 	logger *pct.Logger,
 	spool data.Spooler,
 	config pc.QAN,
 ) *profiler {
 	return &profiler{
-		dialInfo: dialInfo,
-		dialer:   dialer,
-		logger:   logger,
-		spool:    spool,
-		config:   config,
+		mongoOpts: mongoOpts,
+		logger:    logger,
+		spool:     spool,
+		config:    config,
 	}
 }
 
 type profiler struct {
 	// dependencies
-	dialInfo *pmgo.DialInfo
-	dialer   pmgo.Dialer
-	spool    data.Spooler
-	logger   *pct.Logger
-	config   pc.QAN
+	mongoOpts *options.ClientOptions
+	spool     data.Spooler
+	logger    *pct.Logger
+	config    pc.QAN
 
 	// internal deps
 	monitors   *monitors
-	session    pmgo.SessionManager
+	client     *mongo.Client
 	aggregator *aggregator.Aggregator
 	sender     *sender.Sender
 
@@ -53,19 +54,17 @@ type profiler struct {
 }
 
 // Start starts analyzer but doesn't wait until it exits
-func (self *profiler) Start() error {
+func (self *profiler) Start() (err error) {
 	self.Lock()
 	defer self.Unlock()
 	if self.running {
 		return nil
 	}
 
-	// create new session
-	session, err := createSession(self.dialInfo, self.dialer)
+	self.client, err = mongo.Connect(context.Background(), self.mongoOpts)
 	if err != nil {
 		return err
 	}
-	self.session = session
 
 	// create aggregator which collects documents and aggregates them into qan report
 	self.aggregator = aggregator.New(time.Now(), self.config)
@@ -79,11 +78,11 @@ func (self *profiler) Start() error {
 	}
 
 	f := func(
-		session pmgo.SessionManager,
+		client *mongo.Client,
 		dbName string,
 	) *monitor {
 		return NewMonitor(
-			session,
+			client,
 			dbName,
 			self.aggregator,
 			self.logger,
@@ -94,7 +93,7 @@ func (self *profiler) Start() error {
 
 	// create monitors service which we use to periodically scan server for new/removed databases
 	self.monitors = NewMonitors(
-		session,
+		self.client,
 		f,
 	)
 
@@ -113,6 +112,7 @@ func (self *profiler) Start() error {
 	defer ready.L.Unlock()
 
 	go start(
+		context.Background(),
 		self.monitors,
 		self.wg,
 		self.doneChan,
@@ -174,7 +174,7 @@ func (self *profiler) Status() map[string]string {
 		statusesMap[key.(string)] = value.(string)
 		return true
 	})
-	statusesMap["servers"] = strings.Join(self.session.LiveServers(), ", ")
+	statusesMap["servers"] = strings.Join(self.getServers(context.Background()), ", ")
 	return statusesMap
 }
 
@@ -199,7 +199,7 @@ func (self *profiler) Stop() error {
 	self.sender.Stop()
 
 	// close the session; do it after goroutine is closed
-	self.session.Close()
+	self.client.Disconnect(context.Background())
 
 	// set state to "not running"
 	self.running = false
@@ -207,6 +207,7 @@ func (self *profiler) Stop() error {
 }
 
 func start(
+	ctx context.Context,
 	monitors *monitors,
 	wg *sync.WaitGroup,
 	doneChan <-chan struct{},
@@ -219,7 +220,7 @@ func start(
 	defer monitors.StopAll()
 
 	// monitor all databases
-	monitors.MonitorAll()
+	monitors.MonitorAll(ctx)
 
 	// signal we started monitoring
 	signalReady(ready)
@@ -235,7 +236,7 @@ func start(
 		}
 
 		// update monitors
-		monitors.MonitorAll()
+		monitors.MonitorAll(ctx)
 	}
 }
 
@@ -243,4 +244,46 @@ func signalReady(ready *sync.Cond) {
 	ready.L.Lock()
 	defer ready.L.Unlock()
 	ready.Broadcast()
+}
+
+func (self *profiler) getServers(ctx context.Context) []string {
+	var rss proto.ReplicaSetStatus
+	if err := self.client.Database("admin").RunCommand(ctx, bson.D{{"replSetGetStatus", 1}}).Decode(&rss); err == nil {
+		hostnames := []string{}
+		for _, member := range rss.Members {
+			hostnames = append(hostnames, member.Name)
+		}
+		return hostnames
+	}
+
+	var shardsMap proto.ShardsMap
+	if err := self.client.Database("admin").RunCommand(ctx, bson.D{{"getShardMap", 1}}).Decode(&shardsMap); err == nil && len(shardsMap.Map) > 1 {
+		if _, ok := shardsMap.Map["config"]; ok {
+			hostnames := []string{}
+			hm := make(map[string]bool)
+
+			for _, val := range shardsMap.Map {
+				m := strings.Split(val, "/")
+				hostsStr := ""
+				switch len(m) {
+				case 1:
+					hostsStr = m[0] // there is no / in the hosts list
+				case 2:
+					hostsStr = m[1] // there is a / in the string. Remove the prefix until the / and keep the rest
+				}
+				// since there is no Sets in Go, build a map where the value is the map key
+				hosts := strings.Split(hostsStr, ",")
+				for _, host := range hosts {
+					hm[host] = false
+				}
+			}
+			for host := range hm {
+				hostnames = append(hostnames, host)
+			}
+
+			return hostnames
+		}
+	}
+
+	return self.mongoOpts.Hosts
 }

@@ -1,32 +1,30 @@
 package collector
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
-	"github.com/percona/pmgo"
-	"gopkg.in/mgo.v2/bson"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/status"
 )
 
-const (
-	MgoTimeoutTail = 1 * time.Second
-)
-
-func New(session pmgo.SessionManager, dbName string) *Collector {
+func New(client *mongo.Client, dbName string) *Collector {
 	return &Collector{
-		session: session,
-		dbName:  dbName,
+		client: client,
+		dbName: dbName,
 	}
 }
 
 type Collector struct {
 	// dependencies
-	session pmgo.SessionManager
-	dbName  string
+	client *mongo.Client
+	dbName string
 
 	// provides
 	docsChan chan proto.SystemProfile
@@ -71,7 +69,7 @@ func (self *Collector) Start() (<-chan proto.SystemProfile, error) {
 
 	go start(
 		self.wg,
-		self.session,
+		self.client,
 		self.dbName,
 		self.docsChan,
 		self.doneChan,
@@ -114,26 +112,18 @@ func (self *Collector) Status() map[string]string {
 	}
 
 	s := self.status.Map()
-	s["profile"] = getProfile(self.session, self.dbName)
+	s["profile"] = getProfile(context.Background(), self.client, self.dbName)
 
 	return s
 }
 
-func getProfile(session pmgo.SessionManager, dbName string) string {
-	session = session.Copy()
-	defer session.Close()
-
+func getProfile(ctx context.Context, client *mongo.Client, dbName string) string {
 	result := struct {
 		Was       int
 		Slowms    int
 		Ratelimit int
 	}{}
-	err := session.DB(dbName).Run(
-		bson.M{
-			"profile": -1,
-		},
-		&result,
-	)
+	err := client.Database(dbName).RunCommand(ctx, bson.D{{"profile", -1}}).Decode(&result)
 	if err != nil {
 		return fmt.Sprintf("%s", err)
 	}
@@ -163,7 +153,7 @@ func (self *Collector) Name() string {
 
 func start(
 	wg *sync.WaitGroup,
-	session pmgo.SessionManager,
+	client *mongo.Client,
 	dbName string,
 	docsChan chan<- proto.SystemProfile,
 	doneChan <-chan struct{},
@@ -177,7 +167,8 @@ func start(
 	for {
 		// make a connection and collect data
 		connectAndCollect(
-			session,
+			context.Background(),
+			client,
 			dbName,
 			docsChan,
 			doneChan,
@@ -203,20 +194,23 @@ func start(
 }
 
 func connectAndCollect(
-	session pmgo.SessionManager,
+	ctx context.Context,
+	client *mongo.Client,
 	dbName string,
 	docsChan chan<- proto.SystemProfile,
 	doneChan <-chan struct{},
 	stats *stats,
 	ready *sync.Cond,
 ) {
-	session = session.Copy()
-	defer session.Close()
-
-	collection := session.DB(dbName).C("system.profile")
 	query := createQuery(dbName)
-	iterator := createIterator(collection, query)
-	defer iterator.Close()
+	collection := client.Database(dbName).Collection("system.profile")
+	iterator, err := collection.Find(ctx, query, options.Find().SetSort(bson.D{{"$natural", 1}}), options.Find().SetCursorType(options.Tailable))
+	if err != nil {
+		stats.IteratorErrCounter.Add(1)
+		stats.IteratorErrLast.Set(err.Error())
+		return
+	}
+	defer iterator.Close(context.Background())
 
 	stats.IteratorCreated.Set(time.Now().UTC().Format("2006-01-02 15:04:05"))
 	stats.IteratorCounter.Add(1)
@@ -234,7 +228,13 @@ func connectAndCollect(
 		}
 
 		doc := proto.SystemProfile{}
-		for iterator.Next(&doc) {
+		for iterator.Next(ctx) {
+			if err := iterator.Decode(&doc); err != nil {
+				stats.IteratorErrCounter.Add(1)
+				stats.IteratorErrLast.Set(err.Error())
+				return
+			}
+
 			stats.In.Add(1)
 
 			// check if we should shutdown
@@ -261,7 +261,7 @@ func connectAndCollect(
 			stats.IteratorErrLast.Set(err.Error())
 			return
 		}
-		if iterator.Timeout() {
+		if mongo.IsTimeout(iterator.Err()) {
 			stats.IteratorTimeout.Add(1)
 			continue
 		}
@@ -276,12 +276,8 @@ func connectAndCollect(
 func createQuery(dbName string) bson.M {
 	return bson.M{
 		"ns": bson.M{"$ne": dbName + ".system.profile"},
-		"ts": bson.M{"$gt": bson.Now()},
+		"ts": bson.M{"$gt": time.Now()},
 	}
-}
-
-func createIterator(collection pmgo.CollectionManager, query bson.M) pmgo.IterManager {
-	return collection.Find(query).Sort("$natural").Tail(MgoTimeoutTail)
 }
 
 func signalReady(ready *sync.Cond) {

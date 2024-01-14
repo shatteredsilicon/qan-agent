@@ -10,6 +10,7 @@ import (
 	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/bson"
 
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
 )
@@ -90,7 +91,7 @@ func TestParser_running(t *testing.T) {
 	select {
 	case docsChan <- pm.SystemProfile{
 		Ts: timeStart,
-		Query: pm.BsonD{
+		Query: bson.D{
 			{"find", "test"},
 		},
 		ResponseLength: 100,
