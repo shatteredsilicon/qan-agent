@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/percona/pmgo"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -15,7 +15,7 @@ import (
 )
 
 func NewMonitor(
-	session pmgo.SessionManager,
+	mongoClient *mongo.Client,
 	dbName string,
 	aggregator *aggregator.Aggregator,
 	logger *pct.Logger,
@@ -23,23 +23,23 @@ func NewMonitor(
 	config pc.QAN,
 ) *monitor {
 	return &monitor{
-		session:    session,
-		dbName:     dbName,
-		aggregator: aggregator,
-		logger:     logger,
-		spool:      spool,
-		config:     config,
+		mongoClient: mongoClient,
+		dbName:      dbName,
+		aggregator:  aggregator,
+		logger:      logger,
+		spool:       spool,
+		config:      config,
 	}
 }
 
 type monitor struct {
 	// dependencies
-	session    pmgo.SessionManager
-	dbName     string
-	aggregator *aggregator.Aggregator
-	spool      data.Spooler
-	logger     *pct.Logger
-	config     pc.QAN
+	mongoClient *mongo.Client
+	dbName      string
+	aggregator  *aggregator.Aggregator
+	spool       data.Spooler
+	logger      *pct.Logger
+	config      pc.QAN
 
 	// internal services
 	services []services
@@ -69,7 +69,7 @@ func (self *monitor) Start() error {
 	}()
 
 	// create collector and start it
-	c := collector.New(self.session, self.dbName)
+	c := collector.New(self.mongoClient, self.dbName)
 	docsChan, err := c.Start()
 	if err != nil {
 		return err

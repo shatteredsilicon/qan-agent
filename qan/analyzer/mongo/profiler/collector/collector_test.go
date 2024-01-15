@@ -1,14 +1,16 @@
 package collector
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
-	"github.com/percona/pmgo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/test/profiling"
 )
@@ -16,14 +18,16 @@ import (
 func TestNew(t *testing.T) {
 	t.Parallel()
 
-	dialer := pmgo.NewDialer()
-	dialInfo, _ := pmgo.ParseURL("127.0.0.1:27017")
-	session, err := dialer.DialWithInfo(dialInfo)
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI("mongodb://127.0.0.1:27017").SetServerAPIOptions(serverAPI)
+	require.NoError(t, mongoOpts.Validate())
+
+	client, err := mongo.Connect(context.TODO(), mongoOpts)
 	require.NoError(t, err)
 
 	type args struct {
-		session pmgo.SessionManager
-		dbName  string
+		client *mongo.Client
+		dbName string
 	}
 	tests := []struct {
 		name string
@@ -33,19 +37,19 @@ func TestNew(t *testing.T) {
 		{
 			name: "127.0.0.1:27017",
 			args: args{
-				session: session,
-				dbName:  "",
+				client: client,
+				dbName: "",
 			},
 			want: &Collector{
-				session: session,
-				dbName:  "",
+				client: client,
+				dbName: "",
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := New(tt.args.session, tt.args.dbName); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("New(%v, %v) = %v, want %v", tt.args.session, tt.args.dbName, got, tt.want)
+			if got := New(tt.args.client, tt.args.dbName); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("New(%v, %v) = %v, want %v", tt.args.client, tt.args.dbName, got, tt.want)
 			}
 		})
 	}
@@ -54,12 +58,14 @@ func TestNew(t *testing.T) {
 func TestCollector_StartStop(t *testing.T) {
 	t.Parallel()
 
-	dialer := pmgo.NewDialer()
-	dialInfo, _ := pmgo.ParseURL("127.0.0.1:27017")
-	session, err := dialer.DialWithInfo(dialInfo)
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI("mongodb://127.0.0.1:27017").SetServerAPIOptions(serverAPI)
+	require.NoError(t, mongoOpts.Validate())
+
+	client, err := mongo.Connect(context.TODO(), mongoOpts)
 	require.NoError(t, err)
 
-	collector1 := New(session, "")
+	collector1 := New(client, "")
 	docsChan, err := collector1.Start()
 	require.NoError(t, err)
 	assert.NotNil(t, docsChan)
@@ -70,16 +76,18 @@ func TestCollector_StartStop(t *testing.T) {
 func TestCollector_Stop(t *testing.T) {
 	t.Parallel()
 
-	dialer := pmgo.NewDialer()
-	dialInfo, _ := pmgo.ParseURL("127.0.0.1:27017")
-	session, err := dialer.DialWithInfo(dialInfo)
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI("mongodb://127.0.0.1:27017").SetServerAPIOptions(serverAPI)
+	require.NoError(t, mongoOpts.Validate())
+
+	client, err := mongo.Connect(context.TODO(), mongoOpts)
 	require.NoError(t, err)
 
 	// #1
-	notStarted := New(session, "")
+	notStarted := New(client, "")
 
 	// #2
-	started := New(session, "")
+	started := New(client, "")
 	_, err = started.Start()
 	require.NoError(t, err)
 
@@ -120,14 +128,15 @@ func TestCollector(t *testing.T) {
 	err = profiling.New("").Enable("")
 	require.NoError(t, err)
 
-	// create separate connection to db for collector
-	dialer := pmgo.NewDialer()
-	dialInfo, _ := pmgo.ParseURL("")
-	session, err := dialer.DialWithInfo(dialInfo)
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI("mongodb://127.0.0.1:27017").SetServerAPIOptions(serverAPI)
+	require.NoError(t, mongoOpts.Validate())
+
+	client, err := mongo.Connect(context.TODO(), mongoOpts)
 	require.NoError(t, err)
 
 	// create collector
-	collector := New(session, "")
+	collector := New(client, "")
 	docsChan, err := collector.Start()
 	require.NoError(t, err)
 	defer collector.Stop()
@@ -139,10 +148,8 @@ func TestCollector(t *testing.T) {
 	}
 
 	// add data through separate connection
-	session, err = dialer.DialWithInfo(dialInfo)
-	require.NoError(t, err)
 	for _, person := range people {
-		err = session.DB("test").C("people").Insert(&person)
+		_, err = client.Database("test").Collection("people").InsertOne(context.TODO(), &person)
 		require.NoError(t, err)
 	}
 

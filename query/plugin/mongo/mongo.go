@@ -19,6 +19,7 @@ package mongo
 
 import (
 	"encoding/json"
+	"net/url"
 
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/explain"
@@ -67,9 +68,26 @@ func execExplain(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
 		return nil, err
 	}
 
-	return explain.Explain(in.DSN, q.Db, q.Query)
+	return explain.Explain(FixDSN(in.DSN), q.Db, q.Query)
 }
 
 func execSummary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	return summary.Summary(in.DSN)
+	return summary.Summary(FixDSN(in.DSN))
+}
+
+// FixDSN adds default 'mongodb://' scheme to dsn
+// if it doesn't have a scheme
+func FixDSN(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil || u == nil || u.Scheme == "" {
+		// assume it's invalid because it doesn't have schema,
+		// add default schema 'mongodb://' and try it again
+		tmpDSN := "mongodb://" + dsn
+		u, err = url.Parse(tmpDSN)
+		if err == nil && u != nil && u.Scheme != "" {
+			dsn = tmpDSN
+		}
+	}
+
+	return dsn
 }

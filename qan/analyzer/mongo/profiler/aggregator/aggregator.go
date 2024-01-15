@@ -40,7 +40,7 @@ func New(timeStart time.Time, config pc.QAN) *Aggregator {
 	aggregator.d = time.Duration(config.Interval) * time.Second
 
 	// create mongolib stats
-	fp := fingerprinter.NewFingerprinter(fingerprinter.DEFAULT_KEY_FILTERS)
+	fp := fingerprinter.NewFingerprinter(fingerprinter.DefaultKeyFilters())
 	aggregator.mongostats = mongostats.New(fp)
 
 	// create new interval

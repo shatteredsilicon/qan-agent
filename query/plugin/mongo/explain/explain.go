@@ -18,12 +18,14 @@
 package explain
 
 import (
+	"context"
 	"time"
 
 	"github.com/percona/percona-toolkit/src/go/mongolib/explain"
-	"github.com/percona/pmgo"
 	"github.com/shatteredsilicon/ssm/proto"
-	"gopkg.in/mgo.v2"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 const (
@@ -34,26 +36,24 @@ const (
 
 func Explain(dsn, db, query string) (*proto.ExplainResult, error) {
 	// if dsn is incorrect we should exit immediately as this is not gonna correct itself
-	dialInfo, err := pmgo.ParseURL(dsn)
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI(dsn)
+	if err := mongoOpts.Validate(); err != nil {
+		return nil, err
+	}
+	mongoOpts.SetServerAPIOptions(serverAPI).
+		SetConnectTimeout(MgoTimeoutDialInfo).
+		SetSocketTimeout(MgoTimeoutSessionSocket).
+		SetTimeout(MgoTimeoutSessionSync).
+		SetReadPreference(readpref.Nearest())
+
+	client, err := mongo.Connect(context.TODO(), mongoOpts)
 	if err != nil {
 		return nil, err
 	}
-	dialer := pmgo.NewDialer()
 
-	dialInfo.Timeout = MgoTimeoutDialInfo
-	// Disable automatic replicaSet detection, connect directly to specified server
-	dialInfo.Direct = true
-	session, err := dialer.DialWithInfo(dialInfo)
-	if err != nil {
-		return nil, err
-	}
-	defer session.Close()
-	session.SetMode(mgo.Eventual, true)
-	session.SetSyncTimeout(MgoTimeoutSessionSync)
-	session.SetSocketTimeout(MgoTimeoutSessionSocket)
-
-	ex := explain.New(session)
-	resultJson, err := ex.Explain(db, []byte(query))
+	ex := explain.New(context.Background(), client)
+	resultJson, err := ex.Run(db, []byte(query))
 	if err != nil {
 		return nil, err
 	}
