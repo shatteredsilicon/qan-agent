@@ -23,19 +23,7 @@ func GetMySQLConfig(config config.QAN) ([]string, []string, error) {
 }
 
 func makeSlowLogConfig() ([]string, []string, error) {
-	on := []string{
-		"SET GLOBAL slow_query_log=OFF",
-		"SET GLOBAL log_output='file'", // as of MySQL 5.1.6
-	}
-	off := []string{
-		"SET GLOBAL slow_query_log=OFF",
-	}
-
-	on = append(on,
-		"SET GLOBAL slow_query_log=ON",
-		"SET time_zone='+0:00'",
-	)
-	return on, off, nil
+	return []string{"SET time_zone='+0:00'"}, []string{}, nil
 }
 
 func makeRDSSlowLogConfig() ([]string, []string, error) {
