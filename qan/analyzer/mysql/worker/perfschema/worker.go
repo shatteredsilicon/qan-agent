@@ -837,6 +837,11 @@ ClassLoop:
 		}
 		class.TotalQueries = d.CountStar
 		class.Metrics = stats
+		class.Class.Metrics = &qan.Metrics{
+			TimeMetrics:   class.Metrics.TimeMetrics,
+			NumberMetrics: class.Metrics.NumberMetrics,
+			BoolMetrics:   class.Metrics.BoolMetrics,
+		}
 		classes = append(classes, class)
 
 		// Add the class to the global metrics.
