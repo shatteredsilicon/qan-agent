@@ -252,6 +252,8 @@ github.com/shatteredsilicon/go-sql-driver-mysql v0.0.0-20231031081844-ca087917bf
 github.com/shatteredsilicon/go-sql-driver-mysql v0.0.0-20231031081844-ca087917bf67/go.mod h1:OXbVy3sEdcQ2Doequ6Z5BW6fXNQTmx+9S1MCJN5yJMI=
 github.com/shatteredsilicon/ssm v0.0.0-20230919190147-2b2ce9b957bb h1:NVKE5nUDkQnWY9eAcU3KBWdUSpPmCCwc0osyXtXKgv8=
 github.com/shatteredsilicon/ssm v0.0.0-20230919190147-2b2ce9b957bb/go.mod h1:HB+33VUlhN+51gjvrmUXnUUkHkpuPU4ZYfuHHfMN2Wc=
+github.com/shatteredsilicon/ssm v0.0.0-20240311064044-f7a2fdb29abd h1:jTtax7joX0J8ni1SIN+/r66/L5Cd1S9uTASc0u/wL0M=
+github.com/shatteredsilicon/ssm v0.0.0-20240311064044-f7a2fdb29abd/go.mod h1:HB+33VUlhN+51gjvrmUXnUUkHkpuPU4ZYfuHHfMN2Wc=
 github.com/shirou/gopsutil v3.20.12+incompatible h1:6VEGkOXP/eP4o2Ilk8cSsX0PhOEfX6leqAnD+urrp9M=
 github.com/shirou/gopsutil v3.20.12+incompatible/go.mod h1:5b4v6he4MtMOwMlS0TUMTu2PcXUg8+E1lC7eC3UO/RA=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
