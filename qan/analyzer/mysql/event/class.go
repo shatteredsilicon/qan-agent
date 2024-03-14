@@ -62,6 +62,7 @@ func NewClass(id, fingerprint string, sample bool) *Class {
 			TotalQueries: 0,
 			Example:      &qan.Example{},
 			Sample:       sample,
+			UserSources:  make([]qan.UserSource, 0),
 		},
 		Metrics: m,
 	}
@@ -109,12 +110,20 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 			}
 		}
 	}
+	if e.User != "" && e.Host != "" {
+		c.UserSources = append(c.UserSources, qan.UserSource{
+			Ts:   e.Ts.UnixNano(),
+			User: e.User,
+			Host: e.Host,
+		})
+	}
 }
 
 // AddClass adds a Class to the current class. This is used with pre-aggregated classes.
 func (c *Class) AddClass(newClass *Class) {
 	c.UniqueQueries++
 	c.TotalQueries += newClass.TotalQueries
+	c.UserSources = append(c.UserSources, newClass.UserSources...)
 
 	for newMetric, newStats := range newClass.Metrics.TimeMetrics {
 		stats, ok := c.Metrics.TimeMetrics[newMetric]
