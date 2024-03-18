@@ -18,10 +18,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	golog "log"
+	"net"
 	"os"
 	"os/signal"
 	"os/user"
@@ -29,6 +31,7 @@ import (
 	"syscall"
 	"time"
 
+	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/agent/release"
 	"github.com/shatteredsilicon/qan-agent/client"
@@ -44,6 +47,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/query"
 	"github.com/shatteredsilicon/qan-agent/ticker"
 	"github.com/shatteredsilicon/ssm/proto"
+	"golang.org/x/net/proxy"
 )
 
 var (
@@ -79,6 +83,24 @@ func init() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	proxyDialer := proxy.FromEnvironment()
+	directDialer := proxy.Direct
+	mysqlDriver.RegisterDialContext("tcp", func(ctx context.Context, addr string) (net.Conn, error) {
+		ip, _ := net.ResolveTCPAddr("tcp", addr)
+		iAddrs, _ := net.InterfaceAddrs()
+		if ip == nil || len(iAddrs) == 0 {
+			return proxyDialer.Dial("tcp", addr)
+		}
+
+		for _, iAddr := range iAddrs {
+			if ipNet, ok := iAddr.(*net.IPNet); ok && ipNet.IP.Equal(ip.IP) {
+				return directDialer.Dial("tcp", addr)
+			}
+		}
+
+		return proxyDialer.Dial("tcp", addr)
+	})
 }
 
 func main() {

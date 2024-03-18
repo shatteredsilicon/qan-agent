@@ -32,7 +32,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.0 // indirect
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bradfitz/slice v0.0.0-20160823171949-d9036e2120b5 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
@@ -53,7 +52,6 @@ require (
 	github.com/montanaflynn/stats v0.7.0 // indirect
 	github.com/opentracing-contrib/go-grpc v0.0.0-20210225150812-73cb765af46e // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
-	github.com/percona/pmgo v0.0.0-20171205120904-497d06e28f91 // indirect
 	github.com/philhofer/fwd v1.1.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.14.0 // indirect
@@ -86,8 +84,6 @@ require (
 	google.golang.org/grpc v1.52.3 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/DataDog/dd-trace-go.v1 v1.47.0 // indirect
-	gopkg.in/mgo.v2 v2.0.0-20160818020120-3f83fa500528 // indirect
-	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	inet.af/netaddr v0.0.0-20220811202034-502d2d690317 // indirect
 	k8s.io/apimachinery v0.20.6 // indirect
