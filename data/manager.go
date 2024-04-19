@@ -131,19 +131,54 @@ func (m *Manager) Start() error {
 		pct.NewLogger(m.logger.LogChan(), "data-sender"),
 		m.client,
 	)
-	err = sender.Start(
-		m.spooler,
-		time.Tick(time.Duration(config.SendInterval)*time.Second),
-		config.SendInterval,
-		pct.ToBool(config.Blackhole),
-	)
-	if err != nil {
+	senderStart := func() error {
+		return sender.Start(
+			m.spooler,
+			time.Tick(time.Duration(config.SendInterval)*time.Second),
+			config.SendInterval,
+			pct.ToBool(config.Blackhole),
+		)
+	}
+	if err := senderStart(); err != nil {
 		return err
 	}
 	m.sender = sender
 
 	m.config = config
 	m.running = true
+
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				m.logger.Error("Guard routine for spooler and sender crashes:", err)
+			}
+			m.running = false
+		}()
+
+		for {
+			if !m.running {
+				return
+			}
+
+			select {
+			case <-spooler.sync.CrashChan:
+				// Restart spooler if it crashes
+				m.status.Update("data", "Restarting spooler")
+				if err := spooler.Start(sz); err != nil {
+					m.logger.Error("Failed to restart spooler after it crashes: ", err)
+					return
+				}
+			case <-sender.sync.CrashChan:
+				// Restart sender if if crashes
+				m.status.Update("data", "Restarting sender")
+				if err := senderStart(); err != nil {
+					m.logger.Error("Failed to restart sender after it crashes: ", err)
+					return
+				}
+			case <-time.After(time.Second):
+			}
+		}
+	}()
 
 	m.logger.Info("Started")
 	m.status.Update("data", "Running")

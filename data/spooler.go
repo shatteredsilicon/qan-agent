@@ -304,6 +304,7 @@ func (s *DiskvSpooler) run() {
 	defer func() {
 		if err := recover(); err != nil {
 			s.logger.Error("Data spooler crashed: ", err)
+			s.sync.Crash = true
 		}
 		if s.sync.IsGraceful() {
 			s.logger.Info("spoolData stop")
