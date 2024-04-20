@@ -91,6 +91,7 @@ func (s *Sender) run() {
 	defer func() {
 		if err := recover(); err != nil {
 			s.logger.Error("Data sender crashed: ", err)
+			s.sync.Crash = true
 		}
 		if s.sync.IsGraceful() {
 			s.logger.Info("Stop")
