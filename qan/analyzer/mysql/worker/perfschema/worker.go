@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
@@ -291,17 +290,6 @@ SELECT
 		}
 		if err = rows.Err(); err != nil {
 			return // This bubbles up too (see above).
-		}
-
-		preStmtDoneChan := make(chan error, 1)
-		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan, filterOmit); err == nil {
-			err = <-preStmtDoneChan
-		}
-
-		if errCode, ok := err.(*mysqlDriver.MySQLError); ok && errCode.Number == 1146 {
-			// Ignore if it's a 'table not exists' error to
-			// be compatible with older mysql/mariadb versions
-			err = nil
 		}
 	}()
 	return nil
