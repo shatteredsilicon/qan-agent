@@ -191,7 +191,7 @@ func test001(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 	rows, err := loadData("001")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows)
+	w := NewWorker(logger, nullmysql, getRows, nil)
 
 	// First run doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
@@ -239,7 +239,7 @@ func test002(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 	rows, err := loadData("002")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows)
+	w := NewWorker(logger, nullmysql, getRows, nil)
 
 	// First run doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
@@ -284,7 +284,7 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 	rows, err := loadData("003")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows)
+	w := NewWorker(logger, nullmysql, getRows, nil)
 
 	// First interval doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
@@ -363,7 +363,7 @@ func test004EmptyDigest(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMy
 	rows, err := loadData("004")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows)
+	w := NewWorker(logger, nullmysql, getRows, nil)
 
 	// First run doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
@@ -391,7 +391,7 @@ func test005(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 	rows, err := loadData("005")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows)
+	w := NewWorker(logger, nullmysql, getRows, nil)
 
 	// First interval doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
