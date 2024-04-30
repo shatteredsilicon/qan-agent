@@ -106,7 +106,7 @@ func (row *PreStmtRow) ConvertToDigestRow() *DigestRow {
 	digestRow := DigestRow{}
 
 	preStmtSQL := sha256.Sum256([]byte(fmt.Sprintf("PREPARE %s FROM %s", row.StatementName, row.SQLText)))
-	digestRow.Digest = fmt.Sprintf("%x", preStmtSQL)
+	digestRow.Digest = fmt.Sprintf("%x", preStmtSQL)[16:32]
 	digestRow.DigestText = row.SQLText
 	digestRow.CountStar = uint(row.CountExecute)
 	digestRow.SumTimerWait = row.SumTimerExecute
@@ -174,7 +174,17 @@ func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, cfg con
 		return GetDigestRows(mysqlConn, lastFetchSeconds, c, doneChan, cfg)
 	}
 
-	return NewWorker(pct.NewLogger(f.logChan, name), mysqlConn, getRows)
+	getPreStmtRows := func(c chan<- *DigestRow, doneChan chan<- error) error {
+		err := GetPreStmtRows(mysqlConn, c, doneChan, cfg)
+		if errCode, ok := err.(*mysqlDriver.MySQLError); ok && errCode.Number == 1146 {
+			// Ignore if it's a 'table not exists' error to
+			// be compatible with older mysql/mariadb versions
+			err = nil
+		}
+		return err
+	}
+
+	return NewWorker(pct.NewLogger(f.logChan, name), mysqlConn, getRows, getPreStmtRows)
 }
 
 // GetDigestRows connects to MySQL through `mysql.Connector`,
@@ -282,17 +292,6 @@ SELECT
 		}
 		if err = rows.Err(); err != nil {
 			return // This bubbles up too (see above).
-		}
-
-		preStmtDoneChan := make(chan error, 1)
-		if err = GetPreStmtRows(mysqlConn, c, preStmtDoneChan, cfg); err == nil {
-			err = <-preStmtDoneChan
-		}
-
-		if errCode, ok := err.(*mysqlDriver.MySQLError); ok && errCode.Number == 1146 {
-			// Ignore if it's a 'table not exists' error to
-			// be compatible with older mysql/mariadb versions
-			err = nil
 		}
 	}()
 	return nil
@@ -403,11 +402,13 @@ SELECT
 }
 
 type GetDigestRowsFunc func(c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error
+type GetPreStmtRowsFunc func(c chan<- *DigestRow, doneChan chan<- error) error
 
 type Worker struct {
-	logger    *pct.Logger
-	mysqlConn mysql.Connector
-	getRows   GetDigestRowsFunc
+	logger         *pct.Logger
+	mysqlConn      mysql.Connector
+	getRows        GetDigestRowsFunc
+	getPreStmtRows GetPreStmtRowsFunc
 	// --
 	name            string
 	status          *pct.Status
@@ -426,12 +427,13 @@ type Worker struct {
 	queryExamples         map[string]perfSchemaExample
 }
 
-func NewWorker(logger *pct.Logger, mysqlConn mysql.Connector, getRows GetDigestRowsFunc) *Worker {
+func NewWorker(logger *pct.Logger, mysqlConn mysql.Connector, getRows GetDigestRowsFunc, getPreStmtRows GetPreStmtRowsFunc) *Worker {
 	name := logger.Service()
 	w := &Worker{
-		logger:    logger,
-		mysqlConn: mysqlConn,
-		getRows:   getRows,
+		logger:         logger,
+		mysqlConn:      mysqlConn,
+		getRows:        getRows,
+		getPreStmtRows: getPreStmtRows,
 		// --
 		name: name,
 		status: pct.NewStatus([]string{
@@ -478,7 +480,7 @@ func (w *Worker) Run() (*report.Result, error) {
 	defer w.mysqlConn.Close()
 
 	var err error
-	w.digests.Curr, err = w.getSnapshot()
+	w.digests.Curr, w.digests.PreStmtCurr, err = w.getSnapshot()
 	if err != nil {
 		w.lastErr = err
 		return nil, err
@@ -488,7 +490,7 @@ func (w *Worker) Run() (*report.Result, error) {
 		return nil, nil
 	}
 
-	res, err := w.prepareResult(w.digests.All, w.digests.Curr)
+	res, err := w.prepareResult(w.digests.All, w.digests.Curr, w.digests.PreStmtCurr)
 	if err != nil {
 		w.lastErr = err
 		return nil, err
@@ -498,8 +500,13 @@ func (w *Worker) Run() (*report.Result, error) {
 }
 
 func (w *Worker) Cleanup() error {
-	w.logger.Debug("Cleanup:call:", w.iter.Number)
-	defer w.logger.Debug("Cleanup:return:", w.iter.Number)
+	number := 0
+	if w.iter != nil {
+		number = w.iter.Number
+	}
+	w.logger.Debug("Cleanup:call:", number)
+	defer w.logger.Debug("Cleanup:return:", number)
+
 	w.digests.MergeCurr()
 	last := fmt.Sprintf("rows: %d, fetch: %s, prep: %s",
 		w.lastRowCnt, w.lastFetchTime.Format(time.RFC3339), pct.Duration(w.lastPrepTime))
@@ -587,7 +594,7 @@ func (w *Worker) getQueryExamples(ticker <-chan time.Time) {
 	}
 }
 
-func (w *Worker) getSnapshot() (Snapshot, error) {
+func (w *Worker) getSnapshot() (Snapshot, Snapshot, error) {
 	w.logger.Debug("getSnapshot:call:", w.iter.Number)
 	defer w.logger.Debug("getSnapshot:return:", w.iter.Number)
 
@@ -605,18 +612,29 @@ func (w *Worker) getSnapshot() (Snapshot, error) {
 	} else {
 		seconds = time.Now().UTC().Sub(w.lastFetchTime).Seconds()
 	}
+
 	rowChan := make(chan *DigestRow)
 	doneChan := make(chan error, 1)
-	if err := w.getRows(rowChan, seconds, doneChan); err != nil {
-		if err == sql.ErrNoRows {
-			return Snapshot{}, nil
-		}
-		return Snapshot{}, err
+	checksForDone := 0
+
+	if err := w.getRows(rowChan, seconds, doneChan); err == nil {
+		checksForDone += 1
+	} else if err != sql.ErrNoRows {
+		return Snapshot{}, Snapshot{}, err
 	}
 
-	curr := Snapshot{}
+	preparedRowChan := make(chan *DigestRow)
+	if w.getPreStmtRows != nil {
+		if err := w.getPreStmtRows(preparedRowChan, doneChan); err == nil {
+			checksForDone += 1
+		} else if err != sql.ErrNoRows {
+			return Snapshot{}, Snapshot{}, err
+		}
+	}
+
+	curr, preStmtCurr := Snapshot{}, Snapshot{}
 	var err error // from getRows() on doneChan
-	for {
+	for checksForDone > 0 {
 		select {
 		case row := <-rowChan:
 			w.lastRowCnt++
@@ -652,13 +670,35 @@ func (w *Worker) getSnapshot() (Snapshot, error) {
 					},
 				}
 			}
-		case err = <-doneChan:
-			return curr, err
+		case row := <-preparedRowChan:
+			w.lastRowCnt++
+			if class, haveClass := preStmtCurr[row.Digest]; haveClass {
+				if _, haveRow := class.Rows[row.Schema]; haveRow {
+					w.logger.Error("Got class twice: ", row.Schema, row.Digest)
+					continue
+				}
+				class.Rows[row.Schema] = row
+			} else {
+				// Create the class and init with this schema and row.
+				preStmtCurr[row.Digest] = Class{
+					DigestText: row.DigestText,
+					Rows: map[string]*DigestRow{
+						row.Schema: row,
+					},
+				}
+			}
+		case newErr := <-doneChan:
+			checksForDone -= 1
+			if newErr != nil {
+				err = newErr
+			}
 		}
 	}
+
+	return curr, preStmtCurr, err
 }
 
-func (w *Worker) prepareResult(prev, curr Snapshot) (*report.Result, error) {
+func (w *Worker) prepareResult(prev, curr, preStmtCurr Snapshot) (*report.Result, error) {
 	w.logger.Debug("prepareResult:call:", w.iter.Number)
 	defer w.logger.Debug("prepareResult:return:", w.iter.Number)
 
@@ -673,10 +713,7 @@ func (w *Worker) prepareResult(prev, curr Snapshot) (*report.Result, error) {
 	global := event.NewClass("", "", false)
 	classes := []*event.Class{}
 
-	// Compare current classes to previous.
-ClassLoop:
-	for classId, class := range curr {
-
+	prepareClass := func(classId string, class Class, ignoreTruncate bool) bool {
 		// If this class does not exist in prev, skip the entire class.
 		prevClass, _ := prev[classId]
 		/*
@@ -708,8 +745,12 @@ ClassLoop:
 			// In such case we should re-fetch whole data snapshot, not just it's part.
 			// Reset the worker to initial state and drop this snapshot
 			if row.CountStar < prevRow.CountStar {
-				w.reset()
-				return nil, nil
+				if ignoreTruncate {
+					return true
+				} else {
+					w.reset()
+					return false
+				}
 			}
 
 			// This row executed during the interval.
@@ -759,7 +800,7 @@ ClassLoop:
 
 		// Class was in prev, but no rows in prev were in curr, so skip the class.
 		if n == 0 {
-			continue ClassLoop
+			return true
 		}
 
 		// Divide the total averages to yield the average of the averages.
@@ -809,25 +850,45 @@ ClassLoop:
 		// my $checksum = uc substr(md5_hex($val), -16);
 		// 0 as tzDiff (last param) because we are not saving examples
 		ex, ok := w.queryExamples[classId]
-		class := event.NewClass(classId, class.DigestText, ok)
+		newClass := event.NewClass(classId, class.DigestText, ok)
 		if ok {
-			class.Example = &qan.Example{
+			newClass.Example = &qan.Example{
 				QueryTime: float64(ex.LastSeen.Unix()),
 				Db:        ex.Schema.String,
 				Query:     ex.SQLText.String,
 			}
 		}
-		class.TotalQueries = d.CountStar
-		class.Metrics = stats
-		class.Class.Metrics = &qan.Metrics{
-			TimeMetrics:   class.Metrics.TimeMetrics,
-			NumberMetrics: class.Metrics.NumberMetrics,
-			BoolMetrics:   class.Metrics.BoolMetrics,
+		newClass.TotalQueries = d.CountStar
+		newClass.Metrics = stats
+		newClass.Class.Metrics = &qan.Metrics{
+			TimeMetrics:   newClass.Metrics.TimeMetrics,
+			NumberMetrics: newClass.Metrics.NumberMetrics,
+			BoolMetrics:   newClass.Metrics.BoolMetrics,
 		}
-		classes = append(classes, class)
+		classes = append(classes, newClass)
 
 		// Add the class to the global metrics.
-		global.AddClass(class)
+		global.AddClass(newClass)
+
+		return true
+	}
+
+	// Compare current classes to previous.
+	for classId, class := range curr {
+		if !prepareClass(classId, class, false) {
+			return nil, nil
+		}
+	}
+
+	// Compare current prepared_statements classes to previous.
+	for classId, class := range preStmtCurr {
+		if _, ok := curr[classId]; ok {
+			continue
+		}
+
+		if !prepareClass(classId, class, true) {
+			return nil, nil
+		}
 	}
 
 	// Each row/class was unique, so update the global counts.

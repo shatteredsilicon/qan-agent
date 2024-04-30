@@ -26,10 +26,12 @@ func NewDigests() *Digests {
 
 // Digests represents digests retrieved from performance_schema
 type Digests struct {
-	// All digests collected from performance_schema since creation of Digests or Reset()
+	// All digests collected from performance_schema/prepared_statements_instances since creation of Digests or Reset()
 	All Snapshot
 	// Curr digests collected from performance_schema
 	Curr Snapshot
+	// PreStmtCurr digests collected from prepared_statements_instances
+	PreStmtCurr Snapshot
 }
 
 // MergeCurr merges current snapshot into all collected digests so far
@@ -44,10 +46,26 @@ func (d *Digests) MergeCurr() {
 			d.All[i].Rows[j] = d.Curr[i].Rows[j]
 		}
 	}
+
+	for i := range d.PreStmtCurr {
+		if _, ok := d.All[i]; !ok {
+			d.All[i] = d.Curr[i]
+			continue
+		}
+
+		if _, ok := d.Curr[i]; ok {
+			continue
+		}
+
+		for j := range d.Curr[i].Rows {
+			d.All[i].Rows[j] = d.Curr[i].Rows[j]
+		}
+	}
 }
 
 // Reset drops all collected data
 func (d *Digests) Reset() {
 	d.All = Snapshot{}
-	d.All = Snapshot{}
+	d.Curr = Snapshot{}
+	d.PreStmtCurr = Snapshot{}
 }
