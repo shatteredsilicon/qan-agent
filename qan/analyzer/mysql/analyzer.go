@@ -469,8 +469,8 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 		}()
 
 		makeReport := func(t0, t1 time.Time, result *report.Result) {
-			if t1.Sub(t0).Seconds() < 1 {
-				t1 = t0.Add(time.Second)
+			if t1.Sub(t0).Microseconds() < 1 {
+				t1 = t0.Add(time.Microsecond)
 			}
 			rep := report.MakeReport(a.config.QAN, t0, t1, interval, result, a.logger)
 			if err := a.spool.Write("qan", rep); err != nil {

@@ -32,6 +32,7 @@ package event
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/ssm/proto/qan"
@@ -117,6 +118,21 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 			Host: e.Host,
 		})
 	}
+
+	var startAt, endAt time.Time
+	if !e.Ts.IsZero() {
+		startAt = e.Ts
+		if n, ok := e.TimeMetrics["Query_time"]; ok {
+			endAt = startAt.Add(time.Duration(float64(time.Second) * n))
+		}
+	}
+
+	if !startAt.IsZero() && (c.StartAt.IsZero() || startAt.Before(c.StartAt)) {
+		c.StartAt = startAt
+	}
+	if !endAt.IsZero() && (c.EndAt.IsZero() || endAt.After(c.EndAt)) {
+		c.EndAt = endAt
+	}
 }
 
 // AddClass adds a Class to the current class. This is used with pre-aggregated classes.
@@ -124,6 +140,13 @@ func (c *Class) AddClass(newClass *Class) {
 	c.UniqueQueries++
 	c.TotalQueries += newClass.TotalQueries
 	c.UserSources = append(c.UserSources, newClass.UserSources...)
+
+	if newClass.StartAt.Before(c.StartAt) {
+		c.StartAt = newClass.StartAt
+	}
+	if newClass.EndAt.After(c.EndAt) {
+		c.EndAt = newClass.EndAt
+	}
 
 	for newMetric, newStats := range newClass.Metrics.TimeMetrics {
 		stats, ok := c.Metrics.TimeMetrics[newMetric]

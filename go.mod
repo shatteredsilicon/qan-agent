@@ -14,7 +14,7 @@ require (
 	github.com/percona/percona-toolkit v3.2.1+incompatible
 	github.com/peterbourgon/diskv v2.0.1+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/shatteredsilicon/ssm v0.0.0-20240311064044-f7a2fdb29abd
+	github.com/shatteredsilicon/ssm v0.0.0-20240517211711-0ffe78646d22
 	github.com/stretchr/testify v1.8.1
 	go.mongodb.org/mongo-driver v1.13.1
 	go4.org v0.0.0-20180417224846-9599cf28b011
