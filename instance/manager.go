@@ -174,6 +174,13 @@ func (m *Manager) monitor() {
 		m.status.Update("instance-mrms", "Idle")
 		select {
 		case in := <-m.restartChan:
+			// double check if instance exists in repo pool
+			in, err := m.repo.Get(in.UUID, false)
+			if err != nil {
+				m.logger.Warn(fmt.Printf("Got a restart event for instance %s, but it doesn't exists in the instance pool, could be a side-effect of a instance deletion failure, try restart qan-agent", in.UUID))
+				continue
+			}
+
 			safeDSN := dsn.HidePassword(in.DSN)
 			m.logger.Debug("mrms:restart:" + fmt.Sprintf("%s:%s", in.UUID, safeDSN))
 			m.status.Update("instance-mrms", "Getting info "+safeDSN)
