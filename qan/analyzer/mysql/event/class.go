@@ -110,12 +110,30 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 			}
 		}
 	}
-	if e.User != "" && e.Host != "" {
-		c.UserSources = append(c.UserSources, qan.UserSource{
-			Ts:   e.Ts.UnixNano(),
-			User: e.User,
-			Host: e.Host,
-		})
+
+	if e.Host != "" {
+		merged := false
+		for i := len(c.UserSources) - 1; i >= 0; i-- {
+			// Try to merge user@host rows that are in the same unix timestamp,
+			// this list is in timestamp ASC order, so we loop this list backward,
+			// and exit the loop once two unix timestamp don't match
+			if c.UserSources[i].Ts.Unix() != e.Ts.Unix() {
+				break
+			}
+			if c.UserSources[i].User == e.User && c.UserSources[i].Host == e.Host {
+				c.UserSources[i].Count++
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			c.UserSources = append(c.UserSources, qan.UserSource{
+				Ts:    e.Ts,
+				User:  e.User,
+				Host:  e.Host,
+				Count: 1,
+			})
+		}
 	}
 }
 
