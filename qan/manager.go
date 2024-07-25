@@ -226,6 +226,14 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 		errs := []error{}
 		uuid := string(cmd.Data)
 
+		cmdData := struct {
+			UUID       string `json:"uuid"`
+			SoftRemove bool   `json:"soft_remove"`
+		}{}
+		if err := json.Unmarshal(cmd.Data, &cmdData); err == nil {
+			uuid = cmdData.UUID
+		}
+
 		if err := m.stopAnalyzer(uuid); err != nil {
 			switch err {
 			case ErrNotRunning:
@@ -242,9 +250,13 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 			errs = append(errs, err)
 		}
 
-		// Remove local, cached instance info so if tool is started again we will
-		// fetch the latest instance info.
-		m.instanceRepo.Remove(uuid)
+		if cmdData.SoftRemove {
+			m.instanceRepo.SoftRemove(uuid)
+		} else {
+			// Remove local, cached instance info so if tool is started again we will
+			// fetch the latest instance info.
+			m.instanceRepo.Remove(uuid)
+		}
 
 		return cmd.Reply(nil, errs...)
 	case "GetConfig":
