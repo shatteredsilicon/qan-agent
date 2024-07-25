@@ -83,7 +83,12 @@ func (a *Aggregator) AddEvent(event *log.Event, id, fingerprint string) {
 		outlier = true
 	}
 
-	a.global.AddEvent(event, outlier)
+	// We don't need to deal with User@Host for
+	// global class, so make a copy and set Host
+	// to empty
+	globalEvent := *event
+	globalEvent.Host = ""
+	a.global.AddEvent(&globalEvent, outlier)
 
 	class, ok := a.classes[id]
 	if !ok {
