@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/ssm/proto"
@@ -205,4 +206,15 @@ func (r *Repo) Remove(uuid string) error {
 	delete(r.instances, uuid)
 	r.logger.Info("Removed " + uuid)
 	return nil
+}
+
+func (r *Repo) SoftRemove(uuid string) error {
+	in := proto.Instance{}
+	if err := pct.Basedir.ReadInstance(uuid, &in); err != nil {
+		return err
+	}
+
+	delete(r.instances, uuid)
+	in.Deleted = time.Now()
+	return pct.Basedir.WriteInstance(uuid, in)
 }
