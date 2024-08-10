@@ -175,13 +175,7 @@ func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, cfg con
 	}
 
 	getPreStmtRows := func(c chan<- *DigestRow, doneChan chan<- error) error {
-		err := GetPreStmtRows(mysqlConn, c, doneChan, cfg)
-		if errCode, ok := err.(*mysqlDriver.MySQLError); ok && errCode.Number == 1146 {
-			// Ignore if it's a 'table not exists' error to
-			// be compatible with older mysql/mariadb versions
-			err = nil
-		}
-		return err
+		return GetPreStmtRows(mysqlConn, c, doneChan, cfg)
 	}
 
 	return NewWorker(pct.NewLogger(f.logChan, name), mysqlConn, getRows, getPreStmtRows)
@@ -627,6 +621,8 @@ func (w *Worker) getSnapshot() (Snapshot, Snapshot, error) {
 	if w.getPreStmtRows != nil {
 		if err := w.getPreStmtRows(preparedRowChan, doneChan); err == nil {
 			checksForDone += 1
+		} else if errCode, ok := err.(*mysqlDriver.MySQLError); ok && errCode.Number == 1146 {
+			// if it's a table not exists error, just ignore it
 		} else if err != sql.ErrNoRows {
 			return Snapshot{}, Snapshot{}, err
 		}
