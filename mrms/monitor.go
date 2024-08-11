@@ -35,20 +35,21 @@ const MONITOR_NAME = "mrm-monitor"
 
 type Checker interface {
 	Check() (bool, error)
+	SlowLogChanged() (*bool, error)
 }
 
 type instance struct {
 	instance  proto.Instance
 	checker   Checker
-	listeners map[chan proto.Instance]bool
+	listeners map[chan interface{}]bool
 }
 
 type Monitor interface {
 	Start(interval time.Duration) error
 	Stop() error
 	Status() map[string]string
-	Add(proto.Instance) chan proto.Instance
-	Remove(string, chan proto.Instance)
+	Add(proto.Instance) chan interface{}
+	Remove(string, chan interface{})
 	ListenerCount(uuid string) uint
 	Check()
 }
@@ -67,7 +68,7 @@ type RealMonitor struct {
 func NewRealMonitor(logger *pct.Logger, mysqlConnFactory mysql.ConnectionFactory) *RealMonitor {
 	instances := map[string]*instance{
 		"": {
-			listeners: map[chan proto.Instance]bool{},
+			listeners: map[chan interface{}]bool{},
 		},
 	}
 	m := &RealMonitor{
@@ -104,7 +105,7 @@ func (m *RealMonitor) Status() map[string]string {
 	return m.status.All()
 }
 
-func (m *RealMonitor) Add(in proto.Instance) chan proto.Instance {
+func (m *RealMonitor) Add(in proto.Instance) chan interface{} {
 	m.logger.Debug("Add:call:" + dsn.HidePassword(in.DSN))
 	defer m.logger.Debug("Add:return:" + dsn.HidePassword(in.DSN))
 
@@ -121,22 +122,22 @@ func (m *RealMonitor) Add(in proto.Instance) chan proto.Instance {
 		i = &instance{
 			instance:  in,
 			checker:   c,
-			listeners: map[chan proto.Instance]bool{},
+			listeners: map[chan interface{}]bool{},
 		}
 		m.instances[in.UUID] = i
 	}
 
-	restartChan := make(chan proto.Instance, 1)
+	mrmsChan := make(chan interface{}, 1)
 	if in.UUID != "" {
-		i.listeners[restartChan] = true
+		i.listeners[mrmsChan] = true
 	} else {
-		m.instances[""].listeners[restartChan] = true // global
+		m.instances[""].listeners[mrmsChan] = true // global
 	}
 
-	return restartChan
+	return mrmsChan
 }
 
-func (m *RealMonitor) Remove(uuid string, c chan proto.Instance) {
+func (m *RealMonitor) Remove(uuid string, c chan interface{}) {
 	m.logger.Debug("Remove:call:" + uuid)
 	defer m.logger.Debug("Remove:return:" + uuid)
 
@@ -170,6 +171,20 @@ func (m *RealMonitor) Check() {
 			continue // global
 		}
 		m.logger.Debug("check:" + uuid)
+
+		slowlogChangedTo, err := in.checker.SlowLogChanged()
+		if err != nil {
+			m.logger.Warn(err)
+		} else if slowlogChangedTo != nil {
+			for c := range in.listeners { // only this instance
+				select {
+				case c <- *slowlogChangedTo:
+				default:
+					m.logger.Warn("Listener not ready")
+				}
+			}
+		}
+
 		restarted, err := in.checker.Check()
 		if err != nil {
 			m.logger.Warn(err)

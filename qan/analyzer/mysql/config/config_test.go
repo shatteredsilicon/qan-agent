@@ -3,6 +3,7 @@ package config
 import (
 	"testing"
 
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/stretchr/testify/require"
 )
@@ -17,6 +18,6 @@ func TestValidateConfig(t *testing.T) {
 		ExampleQueries: &exampleQueries,
 		CollectFrom:    "slowlog",
 	}
-	_, err := ValidateConfig(cfg)
+	_, err := ValidateConfig(analyzer.QAN{QAN: cfg})
 	require.NoError(t, err)
 }

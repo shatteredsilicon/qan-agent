@@ -46,10 +46,10 @@ type Manager struct {
 	logger *pct.Logger
 	api    pct.APIConnector
 	// --
-	status      *pct.Status
-	repo        *Repo
-	restartChan chan proto.Instance
-	stopChan    chan struct{}
+	status   *pct.Status
+	repo     *Repo
+	mrmsChan chan interface{}
+	stopChan chan struct{}
 }
 
 func NewManager(logger *pct.Logger, instanceDir string, api pct.APIConnector, monitor mrms.Monitor) *Manager {
@@ -59,10 +59,10 @@ func NewManager(logger *pct.Logger, instanceDir string, api pct.APIConnector, mo
 		logger: logger,
 		api:    api,
 		// --
-		status:      pct.NewStatus([]string{"instance", "instance-repo", "instance-mrms"}),
-		repo:        repo,
-		restartChan: monitor.Add(proto.Instance{}),
-		stopChan:    make(chan struct{}),
+		status:   pct.NewStatus([]string{"instance", "instance-repo", "instance-mrms"}),
+		repo:     repo,
+		mrmsChan: monitor.Add(proto.Instance{}),
+		stopChan: make(chan struct{}),
 	}
 	return m
 }
@@ -173,7 +173,12 @@ func (m *Manager) monitor() {
 	for {
 		m.status.Update("instance-mrms", "Idle")
 		select {
-		case in := <-m.restartChan:
+		case data := <-m.mrmsChan:
+			in, ok := data.(proto.Instance)
+			if !ok {
+				continue
+			}
+
 			// double check if instance exists in repo pool
 			in, err := m.repo.Get(in.UUID, false)
 			if err != nil {

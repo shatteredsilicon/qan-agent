@@ -1,7 +1,7 @@
 package worker
 
 import (
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 )
@@ -14,5 +14,5 @@ type Worker interface {
 	Stop() error
 	Cleanup() error
 	Status() map[string]string
-	SetConfig(config.QAN)
+	SetConfig(analyzer.QAN)
 }

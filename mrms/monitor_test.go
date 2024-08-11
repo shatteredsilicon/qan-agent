@@ -67,7 +67,7 @@ func (s *TestSuite) TestStartStop(t *C) {
 	s.instance.DSN = "fake:dsn@tcp(127.0.0.1:3306)/?parseTime=true"
 
 	// Add the instance to monitor, get back a restart chan.
-	restartChan := m.Add(s.instance)
+	mrmsChan := m.Add(s.instance)
 
 	// Set initial uptime before starting.
 	mockConn.SetUptime(10)
@@ -85,7 +85,8 @@ func (s *TestSuite) TestStartStop(t *C) {
 	// After max 1 second it should notify listener about MySQL restart
 	var gotInstance proto.Instance
 	select {
-	case gotInstance = <-restartChan:
+	case data := <-mrmsChan:
+		gotInstance = data.(proto.Instance)
 	case <-time.After(1 * time.Second):
 	}
 	t.Check(gotInstance, DeepEquals, s.instance)
@@ -106,7 +107,7 @@ func (s *TestSuite) TestStartStop(t *C) {
 	// After stopping service it should not notify listeners anymore
 	time.Sleep(2 * time.Second)
 	select {
-	case gotInstance = <-restartChan:
+	case <-mrmsChan:
 		t.Error("Got restart after stopping monitor")
 	default:
 	}

@@ -30,7 +30,7 @@ type QanAnalyzer struct {
 	StopChan           chan bool
 	ErrorChan          chan error
 	CrashChan          chan bool
-	config             pc.QAN
+	config             analyzer.QAN
 	name               string
 	ValidateConfigMock func(config pc.QAN) (pc.QAN, error)
 	Defaults           map[string]interface{}
@@ -42,7 +42,7 @@ func NewQanAnalyzer(name string) *QanAnalyzer {
 		StopChan:  make(chan bool, 1),
 		ErrorChan: make(chan error, 1),
 		CrashChan: make(chan bool, 1),
-		config:    pc.QAN{},
+		config:    analyzer.QAN{},
 		name:      name,
 		ValidateConfigMock: func(config pc.QAN) (pc.QAN, error) {
 			return config, nil
@@ -72,11 +72,11 @@ func (a *QanAnalyzer) String() string {
 	return a.name
 }
 
-func (a *QanAnalyzer) Config() pc.QAN {
+func (a *QanAnalyzer) Config() analyzer.QAN {
 	return a.config
 }
 
-func (a *QanAnalyzer) SetConfig(config pc.QAN) {
+func (a *QanAnalyzer) SetConfig(config analyzer.QAN) {
 	a.config = config
 }
 

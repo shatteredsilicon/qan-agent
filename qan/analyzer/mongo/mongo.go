@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/data"
@@ -43,7 +42,7 @@ type MongoAnalyzer struct {
 	spool  data.Spooler
 
 	// dependency from setter SetConfig
-	config pc.QAN
+	config analyzer.QAN
 
 	// profiler
 	profiler Profiler
@@ -54,12 +53,12 @@ type MongoAnalyzer struct {
 }
 
 // SetConfig sets the config
-func (m *MongoAnalyzer) SetConfig(setConfig pc.QAN) {
+func (m *MongoAnalyzer) SetConfig(setConfig analyzer.QAN) {
 	m.config = setConfig
 }
 
 // Config returns analyzer running configuration
-func (m *MongoAnalyzer) Config() pc.QAN {
+func (m *MongoAnalyzer) Config() analyzer.QAN {
 	return m.config
 }
 
@@ -85,7 +84,7 @@ func (m *MongoAnalyzer) Start() error {
 		mongoOpts,
 		m.logger,
 		m.spool,
-		m.config,
+		m.config.QAN,
 	)
 
 	if err := m.profiler.Start(); err != nil {

@@ -28,6 +28,7 @@ import (
 
 	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/test/mock"
 	"github.com/shatteredsilicon/qan-agent/test/profiling"
 )
@@ -146,7 +147,7 @@ func TestFactory_MakeMySQL(t *testing.T) {
 	pcQan := pc.QAN{
 		CollectFrom: "perfschema",
 	}
-	plugin.SetConfig(pcQan)
+	plugin.SetConfig(analyzer.QAN{QAN: pcQan})
 
 	assert.Equal(t, map[string]string{serviceName: "Not running"}, plugin.Status())
 	err = plugin.Start()

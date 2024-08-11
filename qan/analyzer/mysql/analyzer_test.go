@@ -25,8 +25,8 @@ import (
 	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	mysqlAnalyzer "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/slowlog"
 	"github.com/shatteredsilicon/qan-agent/test"
@@ -50,7 +50,7 @@ type AnalyzerTestSuite struct {
 	clock         *mock.Clock
 	api           *mock.API
 	worker        *qan_worker.QanWorker
-	restartChan   chan proto.Instance
+	mrmsChan      chan interface{}
 	logChan       chan proto.LogEntry
 	logger        *pct.Logger
 	intervalChan  chan *iter.Interval
@@ -60,7 +60,7 @@ type AnalyzerTestSuite struct {
 	im            *instance.Repo
 	mysqlUUID     string
 	mysqlInstance proto.Instance
-	config        config.QAN
+	config        analyzer.QAN
 }
 
 var _ = Suite(&AnalyzerTestSuite{})
@@ -111,7 +111,7 @@ func (s *AnalyzerTestSuite) SetUpSuite(t *C) {
 	err = s.im.Add(s.mysqlInstance, true)
 	t.Assert(err, IsNil)
 
-	s.restartChan = make(chan proto.Instance, 1)
+	s.mrmsChan = make(chan interface{}, 1)
 }
 
 func (s *AnalyzerTestSuite) SetUpTest(t *C) {
@@ -126,7 +126,7 @@ func (s *AnalyzerTestSuite) SetUpTest(t *C) {
 	// Config needs to be recreated on every test since it can be modified by the test analyzers
 	exampleQueries := true
 	slowLogRotation := true
-	s.config = config.QAN{
+	s.config = analyzer.QAN{
 		QAN: pc.QAN{
 			UUID:            s.mysqlUUID,
 			CollectFrom:     "slowlog",
@@ -160,7 +160,7 @@ func (s *AnalyzerTestSuite) TestRunMockWorker(t *C) {
 		s.config,
 		s.iter,
 		s.nullmysql,
-		s.restartChan,
+		s.mrmsChan,
 		s.worker,
 		s.clock,
 		s.spool,
@@ -222,7 +222,7 @@ func (s *AnalyzerTestSuite) TestStartServiceFast(t *C) {
 		config,
 		s.iter,
 		s.nullmysql,
-		s.restartChan,
+		s.mrmsChan,
 		s.worker,
 		s.clock,
 		s.spool,
@@ -260,7 +260,7 @@ func (s *AnalyzerTestSuite) TestMySQLRestart(t *C) {
 		s.config,
 		s.iter,
 		s.nullmysql,
-		s.restartChan,
+		s.mrmsChan,
 		s.worker,
 		s.clock,
 		s.spool,
@@ -278,7 +278,7 @@ func (s *AnalyzerTestSuite) TestMySQLRestart(t *C) {
 	s.nullmysql.Reset()
 	s.nullmysql.SetGlobalVarInteger("max_slowlog_size", 0) // TakeOverPerconaServerRotation
 	s.nullmysql.SetCond.L.Lock()
-	s.restartChan <- s.mysqlInstance
+	s.mrmsChan <- s.mysqlInstance
 	s.nullmysql.SetCond.Wait()
 	s.nullmysql.SetCond.L.Unlock()
 	test.WaitStatus(1, a, "qan-analyzer", "Idle")
@@ -300,7 +300,7 @@ func (s *AnalyzerTestSuite) TestMySQLRestart(t *C) {
 	s.nullmysql.Reset()
 	s.nullmysql.SetGlobalVarInteger("max_slowlog_size", 100000)
 	s.nullmysql.SetCond.L.Lock()
-	s.restartChan <- s.mysqlInstance
+	s.mrmsChan <- s.mysqlInstance
 	s.nullmysql.SetCond.Wait()
 	s.nullmysql.SetCond.L.Unlock()
 	test.WaitStatus(1, a, "qan-analyzer", "Idle")
@@ -350,7 +350,7 @@ func (s *AnalyzerTestSuite) TestRealSlowLogWorker(t *C) {
 		config,
 		s.iter,
 		realmysql,
-		s.restartChan,
+		s.mrmsChan,
 		worker,
 		s.clock,
 		s.spool,
@@ -388,7 +388,7 @@ func (s *AnalyzerTestSuite) TestRecoverWorkerPanic(t *C) {
 		s.config,
 		s.iter,
 		s.nullmysql,
-		s.restartChan,
+		s.mrmsChan,
 		s.worker,
 		s.clock,
 		s.spool,
@@ -465,7 +465,7 @@ func (s *AnalyzerTestSuite) TestNoSlowLogTakeOver(t *C) {
 		s.config,
 		s.iter,
 		s.nullmysql,
-		s.restartChan,
+		s.mrmsChan,
 		s.worker,
 		s.clock,
 		s.spool,
@@ -497,7 +497,7 @@ func (s *AnalyzerTestSuite) TestSlowLogTakeOver(t *C) {
 		s.config,
 		s.iter,
 		s.nullmysql,
-		s.restartChan,
+		s.mrmsChan,
 		s.worker,
 		s.clock,
 		s.spool,

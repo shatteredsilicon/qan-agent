@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
@@ -101,19 +102,21 @@ func ReadInfoFromShowGlobalStatus(conn mysql.Connector) (info map[string]interfa
 	return info
 }
 
-func ValidateConfig(setConfig pc.QAN) (QAN, error) {
-	runConfig := pc.NewQAN()
+func ValidateConfig(setConfig analyzer.QAN) (analyzer.QAN, error) {
+	runConfig := analyzer.QAN{
+		QAN: pc.NewQAN(),
+	}
 	fmt.Printf("%+v\n", runConfig)
 
 	// Marshal setConfig and unmarshal it back on default config.
 	// This way we keep defaults if they are not set in setConfig.
 	b, err := json.Marshal(setConfig)
 	if err != nil {
-		return QAN{QAN: runConfig}, err
+		return runConfig, err
 	}
 	err = json.Unmarshal(b, &runConfig)
 	if err != nil {
-		return QAN{QAN: runConfig}, err
+		return runConfig, err
 	}
 	fmt.Printf("%+v\n", runConfig)
 
@@ -122,55 +125,23 @@ func ValidateConfig(setConfig pc.QAN) (QAN, error) {
 
 	// Strings
 	if setConfig.CollectFrom != "slowlog" && setConfig.CollectFrom != "perfschema" && setConfig.CollectFrom != "rds-slowlog" {
-		return QAN{QAN: runConfig}, fmt.Errorf("CollectFrom must be 'slowlog' or 'perfschema'")
+		return runConfig, fmt.Errorf("CollectFrom must be 'slowlog' or 'perfschema'")
 	}
 	runConfig.CollectFrom = setConfig.CollectFrom
 
 	// Integers
 	if setConfig.Interval < 0 || setConfig.Interval > 3600 {
-		return QAN{QAN: runConfig}, fmt.Errorf("Interval must be > 0 and <= 3600 (1 hour)")
+		return runConfig, fmt.Errorf("Interval must be > 0 and <= 3600 (1 hour)")
 	}
 	if setConfig.Interval > 0 {
 		runConfig.Interval = setConfig.Interval
 	}
 
-	return QAN{QAN: runConfig}, nil
+	return runConfig, nil
 }
 
 // UnderscoreToCamelCase converts from underscore separated form to camel case form.
 // Ex.: my_func => MyFunc
 func underscoreToCamelCase(s string) string {
 	return strings.Replace(strings.Title(strings.Replace(strings.ToLower(s), "_", " ", -1)), " ", "", -1)
-}
-
-// local QAN struct of proto QAN config
-type QAN struct {
-	pc.QAN
-}
-
-func (q QAN) IsQueryOmitted(fingerprint string) bool {
-	var omit bool
-	if len(q.FilterAllow) > 0 {
-		omit = true
-		for _, allowQuery := range q.FilterAllow {
-			if strings.HasPrefix(
-				strings.TrimSpace(strings.ToLower(fingerprint)),
-				strings.TrimSpace(strings.ToLower(allowQuery)),
-			) {
-				omit = false
-				break
-			}
-		}
-	}
-	for _, omitQuery := range q.FilterOmit {
-		if strings.HasPrefix(
-			strings.TrimSpace(strings.ToLower(fingerprint)),
-			strings.TrimSpace(strings.ToLower(omitQuery)),
-		) {
-			omit = true
-			break
-		}
-	}
-
-	return omit
 }

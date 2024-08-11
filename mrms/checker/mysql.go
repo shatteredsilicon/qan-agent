@@ -31,6 +31,7 @@ type MySQL struct {
 	// --
 	lastUptime      int64
 	lastUptimeCheck time.Time
+	lastSlowLogON   *bool
 }
 
 func NewMySQL(logger *pct.Logger, mysqlConn mysql.Connector) *MySQL {
@@ -100,4 +101,30 @@ func (m *MySQL) Check() (bool, error) {
 
 func (m *MySQL) DSN() string {
 	return m.mysqlConn.DSN()
+}
+
+func (m *MySQL) SlowLogChanged() (*bool, error) {
+	if err := m.mysqlConn.Connect(); err != nil {
+		return nil, err
+	}
+	defer m.mysqlConn.Close()
+
+	dbSlowLogBool, err := m.mysqlConn.GetGlobalVarBoolean("slow_query_log")
+	if err != nil {
+		return nil, err
+	}
+
+	if m.lastSlowLogON == nil {
+		// first run, not changed
+		m.lastSlowLogON = &dbSlowLogBool.Bool
+		return nil, nil
+	}
+
+	if dbSlowLogBool.Bool == *m.lastSlowLogON {
+		// not changed
+		return nil, nil
+	}
+
+	m.lastSlowLogON = &dbSlowLogBool.Bool
+	return m.lastSlowLogON, nil
 }

@@ -18,6 +18,8 @@
 package analyzer
 
 import (
+	"strings"
+
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
@@ -40,13 +42,47 @@ type Analyzer interface {
 	// Stop stops running analyzer, waits until it stops
 	Stop() error
 	// Config returns analyzer configuration
-	Config() pc.QAN
+	Config() QAN
 	// SetConfig sets configuration of analyzer
-	SetConfig(setConfig pc.QAN)
+	SetConfig(setConfig QAN)
 	// Get default configuration
 	GetDefaults(uuid string) map[string]interface{}
 	// String returns human readable identification of Analyzer
 	String() string
 	// Messages returns necessary messages
 	Messages() []proto.Message
+}
+
+// local QAN struct of proto QAN config
+type QAN struct {
+	pc.QAN
+	// mysql specific options
+	SlowLogManuallyOFF *bool `json:",omitempty"`
+}
+
+func (q QAN) IsQueryOmitted(fingerprint string) bool {
+	var omit bool
+	if len(q.FilterAllow) > 0 {
+		omit = true
+		for _, allowQuery := range q.FilterAllow {
+			if strings.HasPrefix(
+				strings.TrimSpace(strings.ToLower(fingerprint)),
+				strings.TrimSpace(strings.ToLower(allowQuery)),
+			) {
+				omit = false
+				break
+			}
+		}
+	}
+	for _, omitQuery := range q.FilterOmit {
+		if strings.HasPrefix(
+			strings.TrimSpace(strings.ToLower(fingerprint)),
+			strings.TrimSpace(strings.ToLower(omitQuery)),
+		) {
+			omit = true
+			break
+		}
+	}
+
+	return omit
 }
