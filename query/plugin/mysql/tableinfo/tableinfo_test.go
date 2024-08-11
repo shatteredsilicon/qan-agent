@@ -22,7 +22,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/util"
@@ -101,14 +100,13 @@ func TestTableInfo(t *testing.T) {
 			require.NotNil(t, tableInfo.Status)
 			assert.Equal(t, table, tableInfo.Status.Name)
 
-			var zeroTime time.Time
-			assert.Equal(t, zeroTime, tableInfo.Status.UpdateTime.Time)
-			assert.Equal(t, zeroTime, tableInfo.Status.CheckTime.Time)
+			assert.Equal(t, "", tableInfo.Status.UpdateTime)
+			assert.Equal(t, "", tableInfo.Status.CheckTime)
 
 			zeroCreateTime, err := conn.VersionConstraint("< 8.0 || > 10.0")
 			require.NoError(t, err)
 			if zeroCreateTime {
-				assert.Equal(t, zeroTime, tableInfo.Status.CreateTime.Time)
+				assert.Equal(t, "", tableInfo.Status.CreateTime)
 			}
 		})
 	})

@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/event"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	. "github.com/shatteredsilicon/qan-agent/test/rootdir"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
@@ -52,7 +52,7 @@ func TestResult001(t *testing.T) {
 		StartOffset: 0,
 		EndOffset:   1000,
 	}
-	config := config.QAN{
+	config := analyzer.QAN{
 		QAN: pc.QAN{
 			UUID:        "1",
 			ReportLimit: 10,

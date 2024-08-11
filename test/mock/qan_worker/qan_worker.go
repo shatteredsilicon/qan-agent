@@ -18,7 +18,7 @@
 package qan_worker
 
 import (
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 )
@@ -77,8 +77,7 @@ func (w *QanWorker) Status() map[string]string {
 	}
 }
 
-func (w *QanWorker) SetConfig(c config.QAN) {
-	return
+func (w *QanWorker) SetConfig(c analyzer.QAN) {
 }
 
 // --------------------------------------------------------------------------

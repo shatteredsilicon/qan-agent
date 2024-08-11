@@ -31,7 +31,7 @@ import (
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
@@ -65,7 +65,7 @@ type WorkerTestSuite struct {
 	logger        *pct.Logger
 	now           time.Time
 	mysqlInstance proto.Instance
-	config        config.QAN
+	config        analyzer.QAN
 	mysqlConn     mysql.Connector
 	worker        *Worker
 	nullmysql     *mock.NullMySQL
@@ -83,7 +83,7 @@ func (s *WorkerTestSuite) SetUpSuite(t *C) {
 	s.now = time.Now().UTC()
 	s.mysqlInstance = proto.Instance{UUID: "1", Name: "mysql1"}
 	exampleQueries := true
-	s.config = config.QAN{
+	s.config = analyzer.QAN{
 		QAN: pc.QAN{
 			UUID: s.mysqlInstance.UUID,
 			Start: []string{
@@ -108,7 +108,7 @@ func (s *WorkerTestSuite) SetUpTest(t *C) {
 	s.nullmysql.Reset()
 }
 
-func (s *WorkerTestSuite) RunWorker(config config.QAN, mysqlConn mysql.Connector, i *iter.Interval) (*report.Result, error) {
+func (s *WorkerTestSuite) RunWorker(config analyzer.QAN, mysqlConn mysql.Connector, i *iter.Interval) (*report.Result, error) {
 	w := NewWorker(s.logger, config, mysqlConn)
 	w.ZeroRunTime = true
 	resultChan := make(chan *report.Result)
@@ -295,7 +295,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 	exampleQueries := true
 	slowLogsRotation := true
 	slowLogsToKeep := 1
-	config := config.QAN{
+	config := analyzer.QAN{
 		QAN: pc.QAN{
 			UUID:            s.mysqlInstance.UUID,
 			Interval:        300,
@@ -411,7 +411,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 	exampleQueries := true
 	slowLogsRotation := true
 	slowLogsToKeep := 1
-	config := config.QAN{
+	config := analyzer.QAN{
 		QAN: pc.QAN{
 			UUID:            s.mysqlInstance.UUID,
 			Interval:        300,
@@ -581,7 +581,7 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 
 	// See TestStartService() for description of these startup tasks.
 	exampleQueries := true
-	config := config.QAN{
+	config := analyzer.QAN{
 		QAN: pc.QAN{
 			UUID:           s.mysqlInstance.UUID,
 			Interval:       300,
@@ -672,7 +672,7 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 }
 
 func (s *WorkerTestSuite) TestStop(t *C) {
-	config := config.QAN{
+	config := analyzer.QAN{
 		QAN: pc.QAN{
 			UUID:           s.mysqlInstance.UUID,
 			Interval:       300,
@@ -766,7 +766,7 @@ func (s *WorkerTestSuite) TestStop(t *C) {
 }
 
 func (s *WorkerTestSuite) TestResult014(t *C) {
-	config := config.QAN{
+	config := analyzer.QAN{
 		QAN: pc.QAN{
 			UUID:           "1",
 			CollectFrom:    "slowlog",

@@ -28,6 +28,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/test"
 	"github.com/shatteredsilicon/qan-agent/test/mock"
 	"github.com/shatteredsilicon/ssm/proto"
@@ -164,7 +165,7 @@ func (s *ManagerTestSuite) TestStartWithConfig(t *C) {
 	f := mock.NewQanAnalyzerFactory(a1, a2)
 	m := qan.NewManager(s.logger, s.im, f)
 	t.Assert(m, NotNil)
-	configs := make([]pc.QAN, 0)
+	configs := make([]analyzer.QAN, 0)
 	for i, analyzerType := range []string{"slowlog", "perfschema"} {
 		// We have two analyzerTypes and two MySQL instances in fixture, lets re-use the index
 		// as we only need one of each analizer type and they need to be different instances.
@@ -180,7 +181,7 @@ func (s *ManagerTestSuite) TestStartWithConfig(t *C) {
 		}
 		err := pct.Basedir.WriteConfig("qan-"+mysqlInstance.UUID, &config)
 		t.Assert(err, IsNil)
-		configs = append(configs, config)
+		configs = append(configs, analyzer.QAN{QAN: config})
 	}
 	// qan.Start() reads qan configs from disk and starts an analyzer for each one.
 	err = m.Start()
@@ -206,7 +207,7 @@ func (s *ManagerTestSuite) TestStartWithConfig(t *C) {
 	} else {
 		t.Check(f.Args, HasLen, 2)
 
-		argConfigs := []pc.QAN{
+		argConfigs := []analyzer.QAN{
 			a1.Config(),
 			a2.Config(),
 		}
@@ -297,7 +298,7 @@ func (s *ManagerTestSuite) TestStart2RemoteQAN(t *C) {
 	} else {
 		t.Check(f.Args, HasLen, 2)
 
-		argConfigs := []pc.QAN{
+		argConfigs := []analyzer.QAN{
 			a1.Config(),
 			a2.Config(),
 		}
@@ -365,7 +366,7 @@ func (s *ManagerTestSuite) TestGetConfig(t *C) {
 	pcQANRunningExpected := pcQANSetExpected
 	pcQANRunningExpected.ReportLimit = 10
 	pcQANRunningExpected.ExampleQueries = &exampleQueries
-	a.SetConfig(pcQANRunningExpected)
+	a.SetConfig(analyzer.QAN{QAN: pcQANRunningExpected})
 
 	// Get the manager config which should be just the analyzer config.
 	gotConfig, errs := m.GetConfig()

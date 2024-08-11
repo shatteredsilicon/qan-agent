@@ -35,7 +35,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	mysqlEvent "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
@@ -76,7 +76,7 @@ var (
 )
 
 type WorkerFactory interface {
-	Make(name string, config config.QAN, mysqlConn mysql.Connector) *Worker
+	Make(name string, config analyzer.QAN, mysqlConn mysql.Connector) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -90,7 +90,7 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, config config.QAN, mysqlConn mysql.Connector) *Worker {
+func (f *RealWorkerFactory) Make(name string, config analyzer.QAN, mysqlConn mysql.Connector) *Worker {
 	return NewWorker(pct.NewLogger(f.logChan, name), config, mysqlConn)
 }
 
@@ -126,7 +126,7 @@ func (f byFileName) Less(i, j int) bool {
 
 type Worker struct {
 	logger    *pct.Logger
-	config    config.QAN
+	config    analyzer.QAN
 	mysqlConn mysql.Connector
 	rds       *rds.Service
 	// --
@@ -154,7 +154,7 @@ type Worker struct {
 	lastStartTime          time.Time
 }
 
-func NewWorker(logger *pct.Logger, config config.QAN, mysqlConn mysql.Connector) *Worker {
+func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connector) *Worker {
 	// By default replace numbers in words with ?
 	query.ReplaceNumbersInWords = true
 
@@ -353,7 +353,7 @@ func (w *Worker) Status() map[string]string {
 	return w.status.All()
 }
 
-func (w *Worker) SetConfig(config config.QAN) {
+func (w *Worker) SetConfig(config analyzer.QAN) {
 	w.config = config
 }
 

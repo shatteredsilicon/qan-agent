@@ -473,3 +473,21 @@ func (a *API) CreateInstance(url string, in interface{}) (bool, error) {
 
 	return created, nil
 }
+
+func (a *API) UpdateAgentConfig(url string, in interface{}) error {
+	data, err := json.Marshal(in)
+	if err != nil {
+		return err
+	}
+
+	url = a.URL(url)
+	resp, _, err := a.Put(url, data)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusOK {
+		return nil
+	}
+
+	return fmt.Errorf("PUT %s (update agent config) returned HTTP status code %d", url, resp.StatusCode)
+}

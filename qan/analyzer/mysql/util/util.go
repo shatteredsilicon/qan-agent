@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 )
 
 var logHeaderRe = regexp.MustCompile(`^#\s*[A-Z]`)
 
-func GetMySQLConfig(config config.QAN) ([]string, []string, error) {
+func GetMySQLConfig(config analyzer.QAN) ([]string, []string, error) {
 	switch config.CollectFrom {
 	case "slowlog":
 		return makeSlowLogConfig()
@@ -23,7 +23,14 @@ func GetMySQLConfig(config config.QAN) ([]string, []string, error) {
 }
 
 func makeSlowLogConfig() ([]string, []string, error) {
-	return []string{"SET time_zone='+0:00'"}, []string{}, nil
+	on := []string{
+		"SET time_zone='+0:00'",
+	}
+	off := []string{
+		"SET GLOBAL slow_query_log=OFF",
+	}
+
+	return on, off, nil
 }
 
 func makeRDSSlowLogConfig() ([]string, []string, error) {

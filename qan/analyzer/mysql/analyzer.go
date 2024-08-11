@@ -28,7 +28,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker"
@@ -36,7 +36,6 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/ticker"
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 const MIN_SLOWLOG_ROTATION_SIZE int64 = 4096
@@ -44,15 +43,15 @@ const MIN_SLOWLOG_ROTATION_SIZE int64 = 4096
 // --------------------------------------------------------------------------
 
 type RealAnalyzer struct {
-	logger      *pct.Logger
-	config      config.QAN
-	iter        iter.IntervalIter
-	mysqlConn   mysql.Connector
-	mrms        mrms.Monitor
-	restartChan chan proto.Instance
-	worker      worker.Worker
-	clock       ticker.Manager
-	spool       data.Spooler
+	logger    *pct.Logger
+	config    analyzer.QAN
+	iter      iter.IntervalIter
+	mysqlConn mysql.Connector
+	mrms      mrms.Monitor
+	mrmsChan  chan interface{}
+	worker    worker.Worker
+	clock     ticker.Manager
+	spool     data.Spooler
 	// --
 	name                string
 	mysqlConfiguredChan chan bool
@@ -68,10 +67,10 @@ type RealAnalyzer struct {
 
 func NewRealAnalyzer(
 	logger *pct.Logger,
-	config config.QAN,
+	config analyzer.QAN,
 	it iter.IntervalIter,
 	mysqlConn mysql.Connector,
-	restartChan chan proto.Instance,
+	mrmsChan chan interface{},
 	worker worker.Worker,
 	clock ticker.Manager,
 	spool data.Spooler,
@@ -81,14 +80,14 @@ func NewRealAnalyzer(
 
 	// Return analyzer instance
 	a := &RealAnalyzer{
-		logger:      logger,
-		config:      config,
-		iter:        it,
-		mysqlConn:   mysqlConn,
-		restartChan: restartChan,
-		worker:      worker,
-		clock:       clock,
-		spool:       spool,
+		logger:    logger,
+		config:    config,
+		iter:      it,
+		mysqlConn: mysqlConn,
+		mrmsChan:  mrmsChan,
+		worker:    worker,
+		clock:     clock,
+		spool:     spool,
 		// --
 		name:                name,
 		mysqlConfiguredChan: make(chan bool), // note: this channel can't be buffered
@@ -146,12 +145,12 @@ func (a *RealAnalyzer) Status() map[string]string {
 	return a.status.Merge(a.worker.Status())
 }
 
-func (a *RealAnalyzer) Config() pc.QAN {
-	return a.config.QAN
+func (a *RealAnalyzer) Config() analyzer.QAN {
+	return a.config
 }
 
-func (a *RealAnalyzer) SetConfig(c pc.QAN) {
-	a.config = config.QAN{QAN: c}
+func (a *RealAnalyzer) SetConfig(c analyzer.QAN) {
+	a.config = c
 }
 
 func (m *RealAnalyzer) GetDefaults(uuid string) map[string]interface{} {
@@ -219,8 +218,45 @@ func (a *RealAnalyzer) setMySQLConfig() error {
 	if err != nil {
 		return err
 	}
+
+	if a.config.CollectFrom == "slowlog" && !boolValue(a.config.SlowLogManuallyOFF) {
+		// if it's slowlog harvesting and @@slow_query_log
+		// is not set to OFF manually during the QAN runtime,
+		// we should set slow_query_log ON automatically
+		start = append(start, "SET GLOBAL slow_query_log=ON")
+	}
+
 	a.config.Start = start
 	a.config.Stop = stop
+
+	return nil
+}
+
+func (a *RealAnalyzer) checkSlowLogManuallyOFF() error {
+	dbSlowLogBool, err := a.mysqlConn.GetGlobalVarBoolean("slow_query_log")
+	if err != nil {
+		return err
+	}
+	if !dbSlowLogBool.Bool || !boolValue(a.config.SlowLogManuallyOFF) {
+		return nil
+	}
+
+	manuallyOFF := false
+	a.config.SlowLogManuallyOFF = &manuallyOFF
+
+	return a.writeConfig()
+}
+
+func (a *RealAnalyzer) writeConfig() error {
+	configCopy := a.config
+	configCopy.Start = nil
+	configCopy.Stop = nil
+	if err := pct.Basedir.WriteConfig(
+		fmt.Sprintf("qan-%s", a.config.UUID),
+		configCopy,
+	); err != nil {
+		return fmt.Errorf("failed to write qan config %+v to disk: %s", configCopy, err)
+	}
 
 	return nil
 }
@@ -264,6 +300,11 @@ func (a *RealAnalyzer) configureMySQL(action string, tryLimit int) {
 
 		if err := a.TakeOverPerconaServerRotation(); err != nil {
 			lastErr = fmt.Errorf("cannot takeover slow log rotation: %s", err)
+			continue
+		}
+
+		if err := a.checkSlowLogManuallyOFF(); err != nil {
+			lastErr = fmt.Errorf("cannot check slow log manually off: %s", err)
 			continue
 		}
 
@@ -401,15 +442,34 @@ func (a *RealAnalyzer) run() {
 			} else {
 				a.logger.Info(fmt.Sprintf("First interval begins in %.1f seconds", t))
 			}
-		case <-a.restartChan:
-			a.logger.Debug("run:mysql:restart")
-			// If MySQL is not configured, then configureMySQL() should already
-			// be running, trying to configure it. Else, we need to run
-			// configureMySQL again.
-			if mysqlConfigured {
-				mysqlConfigured = false
-				a.iter.Stop()
-				go a.configureMySQL("start", 0) // try forever
+		case data := <-a.mrmsChan:
+			// Currently there are only 2 possible data types
+			// come from this channel:
+			// 1 - monitored server restart (proto.Instance)
+			// 2 - MySQL/MariaDB slow log changed (bool)
+			var SlowLogON, isSlowLogData bool
+			if data != nil {
+				SlowLogON, isSlowLogData = data.(bool)
+			}
+
+			if isSlowLogData {
+				slowlogOFF := !SlowLogON
+				a.config.SlowLogManuallyOFF = &slowlogOFF
+				if err := a.writeConfig(); err != nil {
+					a.logger.Error("Failed to write qan config %+v to disk: ", err)
+				} else if slowlogOFF {
+					a.logger.Warn("slow_query_log turned off during runtime")
+				}
+			} else {
+				a.logger.Debug("run:mysql:restart")
+				// If MySQL is not configured, then configureMySQL() should already
+				// be running, trying to configure it. Else, we need to run
+				// configureMySQL again.
+				if mysqlConfigured {
+					mysqlConfigured = false
+					a.iter.Stop()
+					go a.configureMySQL("start", 0) // try forever
+				}
 			}
 		case <-a.closeChan:
 			a.logger.Debug("run:stop")

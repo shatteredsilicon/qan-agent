@@ -19,7 +19,6 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/slowlog"
 	"github.com/shatteredsilicon/qan-agent/ticker"
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
@@ -43,7 +42,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 	// return initialized MySQLAnalyzer
 	return &MySQLAnalyzer{
 		// on initialization config and analyzer are uninitialized
-		config:   pc.QAN{},
+		config:   analyzer.QAN{},
 		analyzer: nil,
 		// initialize
 		protoInstance:           protoInstance,
@@ -63,7 +62,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 // and MySQL implementations of Slowlog Analyzer and Perfschema Analyzer
 type MySQLAnalyzer struct {
 	// on initialization config and analyzer are uninitialized
-	config   pc.QAN
+	config   analyzer.QAN
 	analyzer analyzer.Analyzer
 	// services initialized in New
 	protoInstance           proto.Instance
@@ -77,12 +76,12 @@ type MySQLAnalyzer struct {
 	rdsSlowlogWorkerFactory rdsslowlog.WorkerFactory
 	mysqlConnFactory        mysql.ConnectionFactory
 	// real analyzer channels
-	tickChan    chan time.Time
-	restartChan chan proto.Instance
+	tickChan chan time.Time
+	mrmsChan chan interface{}
 }
 
 // SetConfig sets the config
-func (m *MySQLAnalyzer) SetConfig(setConfig pc.QAN) {
+func (m *MySQLAnalyzer) SetConfig(setConfig analyzer.QAN) {
 	m.config = setConfig
 	if m.analyzer != nil {
 		m.analyzer.SetConfig(m.config)
@@ -90,7 +89,7 @@ func (m *MySQLAnalyzer) SetConfig(setConfig pc.QAN) {
 }
 
 // Config returns analyzer running configuration
-func (m *MySQLAnalyzer) Config() pc.QAN {
+func (m *MySQLAnalyzer) Config() analyzer.QAN {
 	if m.analyzer != nil {
 		m.config = m.analyzer.Config()
 	}
@@ -113,7 +112,7 @@ func (m *MySQLAnalyzer) Start() error {
 
 	// Add the MySQL DSN to the MySQL restart monitor. If MySQL restarts,
 	// the analyzer will stop its worker and re-configure MySQL.
-	restartChan := m.mrms.Add(m.protoInstance)
+	mrmsChan := m.mrms.Add(m.protoInstance)
 
 	// Make a chan on which the clock will tick at even intervals:
 	// clock -> tickChan -> iter -> analyzer -> worker
@@ -144,7 +143,7 @@ func (m *MySQLAnalyzer) Start() error {
 		config,
 		m.iterFactory.Make(analyzerType, mysqlConn, tickChan),
 		mysqlConn,
-		restartChan,
+		mrmsChan,
 		worker,
 		m.clock,
 		m.spool,
@@ -175,10 +174,10 @@ func (m *MySQLAnalyzer) Stop() error {
 
 	a := m.analyzer
 	tickChan := m.tickChan
-	restartChan := m.restartChan
+	mrmsChan := m.mrmsChan
 	m.analyzer = nil
 	m.tickChan = nil
-	m.restartChan = nil
+	m.mrmsChan = nil
 
 	// Stop ticking on this tickChan. Other services receiving ticks at the same
 	// interval are not affected.
@@ -186,7 +185,7 @@ func (m *MySQLAnalyzer) Stop() error {
 
 	// Stop watching this MySQL instance. Other services watching this MySQL
 	// instance are not affected.
-	m.mrms.Remove(m.protoInstance.UUID, restartChan)
+	m.mrms.Remove(m.protoInstance.UUID, mrmsChan)
 
 	return a.Stop()
 }

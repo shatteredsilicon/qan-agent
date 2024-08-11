@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +30,6 @@ import (
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/ssm/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
 
 const (
@@ -46,7 +44,7 @@ var (
 // An AnalyzerInstance is an Analyzer ran by a Manager, one per MySQL instance
 // as configured.
 type AnalyzerInstance struct {
-	setConfig pc.QAN
+	setConfig analyzer.QAN
 	analyzer  analyzer.Analyzer
 }
 
@@ -102,7 +100,7 @@ func (m *Manager) Start() error {
 		return err
 	}
 	for _, file := range files {
-		data, err := ioutil.ReadFile(file)
+		data, err := os.ReadFile(file)
 		if err != nil && !os.IsNotExist(err) {
 			m.logger.Warn(fmt.Sprintf("Cannot read %s: %s", file, err))
 			continue
@@ -114,7 +112,7 @@ func (m *Manager) Start() error {
 			continue
 		}
 
-		setConfig := pc.QAN{}
+		setConfig := analyzer.QAN{}
 		if err := json.Unmarshal(data, &setConfig); err != nil {
 			m.logger.Warn(fmt.Sprintf("Cannot decode %s: %s", file, err))
 			continue
@@ -176,7 +174,7 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 
 	switch cmd.Cmd {
 	case "StartTool":
-		setConfig := pc.QAN{}
+		setConfig := analyzer.QAN{}
 		if err := json.Unmarshal(cmd.Data, &setConfig); err != nil {
 			return cmd.Reply(nil, err)
 		}
@@ -204,12 +202,13 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 
 		return cmd.Reply(runningConfig) // success
 	case "RestartTool":
-		setConfig := pc.QAN{}
+		setConfig := analyzer.QAN{}
 		if err := json.Unmarshal(cmd.Data, &setConfig); err != nil {
 			return cmd.Reply(nil, err)
 		}
 		uuid := setConfig.UUID
-		if err := m.restartAnalyzer(setConfig); err != nil {
+		var err error
+		if setConfig, err = m.restartAnalyzer(setConfig); err != nil {
 			return cmd.Reply(nil, err)
 		}
 
@@ -311,7 +310,7 @@ func (m *Manager) GetDefaults(uuid string) map[string]interface{} {
 // ///////////////////////////////////////////////////////////////////////////
 // Implementation
 // ///////////////////////////////////////////////////////////////////////////
-func (m *Manager) restartAnalyzer(setConfig pc.QAN) error {
+func (m *Manager) restartAnalyzer(setConfig analyzer.QAN) (analyzer.QAN, error) {
 	// XXX Assume caller has locked m.mux.
 
 	m.logger.Debug("restartAnalyzer:call")
@@ -320,21 +319,24 @@ func (m *Manager) restartAnalyzer(setConfig pc.QAN) error {
 	uuid := setConfig.UUID
 
 	// Check if an analyzer for this instance is running
-	_, ok := m.analyzers[uuid]
+	oldAnalyzer, ok := m.analyzers[uuid]
 	if !ok {
 		m.logger.Debug("restartAnalyzer:not-running", uuid)
-		return ErrNotRunning
+		return setConfig, ErrNotRunning
 	}
 
 	if err := m.stopAnalyzer(uuid); err != nil {
-		return err
+		return setConfig, err
 	}
 
-	return m.startAnalyzer(setConfig)
+	if setConfig.SlowLogManuallyOFF == nil && oldAnalyzer.setConfig.SlowLogManuallyOFF != nil {
+		setConfig.SlowLogManuallyOFF = oldAnalyzer.setConfig.SlowLogManuallyOFF
+	}
+	return setConfig, m.startAnalyzer(setConfig)
 
 }
 
-func (m *Manager) startAnalyzer(setConfig pc.QAN) (err error) {
+func (m *Manager) startAnalyzer(setConfig analyzer.QAN) (err error) {
 	/*
 		XXX Assume caller has locked m.mux.
 	*/

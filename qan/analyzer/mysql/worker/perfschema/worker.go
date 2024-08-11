@@ -29,7 +29,7 @@ import (
 	mysqlDriver "github.com/go-sql-driver/mysql"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
@@ -149,7 +149,7 @@ type Class struct {
 type Snapshot map[string]Class // keyed on digest (classId)
 
 type WorkerFactory interface {
-	Make(name string, mysqlConn mysql.Connector, cfg config.QAN) *Worker
+	Make(name string, mysqlConn mysql.Connector, cfg analyzer.QAN) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -169,7 +169,7 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, cfg config.QAN) *Worker {
+func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, cfg analyzer.QAN) *Worker {
 	getRows := func(c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error {
 		return GetDigestRows(mysqlConn, lastFetchSeconds, c, doneChan, cfg)
 	}
@@ -185,7 +185,7 @@ func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, cfg con
 // fetches snapshot of data from events_statements_summary_by_digest,
 // delivers it over a channel, and notifies success or error through `doneChan`.
 // If `lastFetchSeconds` equals `-1` then it fetches all data, not just since `lastFetchSeconds`.
-func GetDigestRows(mysqlConn mysql.Connector, lastFetchSeconds float64, c chan<- *DigestRow, doneChan chan<- error, cfg config.QAN) error {
+func GetDigestRows(mysqlConn mysql.Connector, lastFetchSeconds float64, c chan<- *DigestRow, doneChan chan<- error, cfg analyzer.QAN) error {
 	q := `
 SELECT
 	COALESCE(SCHEMA_NAME, ''),
@@ -294,7 +294,7 @@ SELECT
 // GetPreStmtRows connects to MySQL through `mysql.Connector`,
 // fetches rows from prepared_stmtements_instances and converts rows into DigestRow structure,
 // delivers it over a channel, and notifies success or error through `doneChan`.
-func GetPreStmtRows(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error, cfg config.QAN) error {
+func GetPreStmtRows(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error, cfg analyzer.QAN) error {
 	q := `
 SELECT
 	STATEMENT_ID,
@@ -527,7 +527,7 @@ func (w *Worker) Status() map[string]string {
 	return w.status.All()
 }
 
-func (w *Worker) SetConfig(config config.QAN) {
+func (w *Worker) SetConfig(config analyzer.QAN) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	w.collectExamples = *config.ExampleQueries

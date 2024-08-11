@@ -24,7 +24,7 @@ import (
 )
 
 type MrmsMonitor struct {
-	c        chan proto.Instance
+	c        chan interface{}
 	instance proto.Instance
 }
 
@@ -33,13 +33,13 @@ func NewMrmsMonitor() *MrmsMonitor {
 	return m
 }
 
-func (m *MrmsMonitor) Add(in proto.Instance) chan proto.Instance {
+func (m *MrmsMonitor) Add(in proto.Instance) chan interface{} {
 	m.instance = in
-	m.c = make(chan proto.Instance, 10)
+	m.c = make(chan interface{}, 10)
 	return m.c
 }
 
-func (m *MrmsMonitor) Remove(uuid string, c chan proto.Instance) {
+func (m *MrmsMonitor) Remove(uuid string, c chan interface{}) {
 	m.instance = proto.Instance{}
 }
 
