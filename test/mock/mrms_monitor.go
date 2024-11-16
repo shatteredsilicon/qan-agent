@@ -64,6 +64,8 @@ func (m *MrmsMonitor) ListenerCount(uuid string) uint {
 	return 0
 }
 
+func (m *MrmsMonitor) SwitchSlowlogCheck(uuid string, on bool) {}
+
 // The restartChan in the real MrmsMonitor is read only.
 // To be consistent with that, instead of returning the channel just for
 // testing purposes, we have this method to simulate a MySQL restart

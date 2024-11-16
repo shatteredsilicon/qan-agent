@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/instance"
+	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
@@ -341,12 +342,14 @@ func (s *AnalyzerTestSuite) TestRealSlowLogWorker(t *C) {
 		"SET GLOBAL long_query_time=10",
 	}
 
-	worker := slowlog.NewWorker(pct.NewLogger(s.logChan, "qan-worker"), config, realmysql)
+	logger := pct.NewLogger(s.logChan, "qan-analyzer")
+	mrmsMonitor := mrms.NewRealMonitor(logger, &mysql.RealConnectionFactory{})
+	worker := slowlog.NewWorker(pct.NewLogger(s.logChan, "qan-worker"), config, realmysql, mrmsMonitor)
 	//intervalChan := make(chan *iter.Interval, 1)
 	//iter := mock.NewIter(intervalChan)
 
 	a := mysqlAnalyzer.NewRealAnalyzer(
-		pct.NewLogger(s.logChan, "qan-analyzer"),
+		logger,
 		config,
 		s.iter,
 		realmysql,

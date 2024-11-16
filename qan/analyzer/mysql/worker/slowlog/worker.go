@@ -24,6 +24,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
@@ -41,7 +42,7 @@ const (
 )
 
 type WorkerFactory interface {
-	Make(name string, config analyzer.QAN, mysqlConn mysql.Connector) *Worker
+	Make(name string, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -55,8 +56,8 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, config analyzer.QAN, mysqlConn mysql.Connector) *Worker {
-	return NewWorker(pct.NewLogger(f.logChan, name), config, mysqlConn)
+func (f *RealWorkerFactory) Make(name string, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor) *Worker {
+	return NewWorker(pct.NewLogger(f.logChan, name), config, mysqlConn, mrmsMonitor)
 }
 
 // --------------------------------------------------------------------------
@@ -96,9 +97,10 @@ type Worker struct {
 	utcOffset       time.Duration
 	outlierTime     float64
 	resultChan      chan *report.Result
+	mrms            mrms.Monitor
 }
 
-func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connector) *Worker {
+func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor) *Worker {
 	// By default replace numbers in words with ?
 	query.ReplaceNumbersInWords = true
 
@@ -136,6 +138,7 @@ func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connecto
 		sync:            pct.NewSyncChan(),
 		utcOffset:       utcOffset,
 		outlierTime:     outlierTime.Float64,
+		mrms:            mrmsMonitor,
 	}
 	return w
 }
@@ -152,9 +155,15 @@ func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) 
 			w.logger.Info(fmt.Sprintf("Rotating slow log: %s >= %s",
 				pct.Bytes(uint64(interval.EndOffset)),
 				pct.Bytes(uint64(w.config.MaxSlowLogSize))))
+			// Rotating slow log requires turning off the slow_query_log,
+			// hence we need to switch off the slow_query_log monitoring
+			w.mrms.SwitchSlowlogCheck(w.config.UUID, false)
 			// Rotate slow log.
 			if err := w.rotateSlowLog(interval); err != nil {
 				w.logger.Error(err)
+			} else {
+				// Re-enable slow_query_log monitoring
+				w.mrms.SwitchSlowlogCheck(w.config.UUID, true)
 			}
 		}
 	}
@@ -198,10 +207,6 @@ func (w *Worker) Run() (*report.Result, error) {
 		return nil, err
 	}
 	defer file.Close()
-
-	if w.job.StartOffset == 0 {
-		w.job.StartOffset = w.job.EndOffset
-	}
 
 	// Create a slow log parser and run it.  It sends log.Event via its channel.
 	// Be sure to stop it when done, else we'll leak goroutines.
@@ -454,13 +459,22 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 
 	// Move current slow log by renaming it.
 	newSlowLogFile := fmt.Sprintf("%s-%d", interval.Filename, time.Now().UTC().Unix())
-	if err := os.Rename(interval.Filename, newSlowLogFile); err != nil {
-		return err
-	}
+	renameErr := os.Rename(interval.Filename, newSlowLogFile)
 
 	// Re-enable slow log.
-	if err := w.mysqlConn.Exec(w.config.Start); err != nil {
-		return err
+	startErr := w.mysqlConn.Exec(w.config.Start)
+
+	if renameErr != nil {
+		return renameErr
+	}
+
+	// Modify interval so worker parses the rest of the old slow log.
+	curSlowLog := interval.Filename
+	interval.Filename = newSlowLogFile
+	interval.EndOffset, _ = pct.FileSize(newSlowLogFile) // todo: handle err
+
+	if startErr != nil {
+		return startErr
 	}
 
 	if err := w.mysqlConn.Exec([]string{"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS"}); err != nil {
@@ -469,11 +483,6 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 			return err
 		}
 	}
-
-	// Modify interval so worker parses the rest of the old slow log.
-	curSlowLog := interval.Filename
-	interval.Filename = newSlowLogFile
-	interval.EndOffset, _ = pct.FileSize(newSlowLogFile) // todo: handle err
 
 	// Purge old slow logs.
 	if !config.DefaultRemoveOldSlowLogs {

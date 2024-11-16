@@ -39,9 +39,11 @@ type Checker interface {
 }
 
 type instance struct {
-	instance  proto.Instance
-	checker   Checker
-	listeners map[chan interface{}]bool
+	instance           proto.Instance
+	checker            Checker
+	listeners          map[chan interface{}]bool
+	slowlogCheckPaused bool
+	sync.RWMutex
 }
 
 type Monitor interface {
@@ -52,6 +54,7 @@ type Monitor interface {
 	Remove(string, chan interface{})
 	ListenerCount(uuid string) uint
 	Check()
+	SwitchSlowlogCheck(uuid string, on bool)
 }
 
 type RealMonitor struct {
@@ -173,9 +176,10 @@ func (m *RealMonitor) Check() {
 		m.logger.Debug("check:" + uuid)
 
 		slowlogChangedTo, err := in.checker.SlowLogChanged()
+		in.RLock()
 		if err != nil {
 			m.logger.Warn(err)
-		} else if slowlogChangedTo != nil {
+		} else if slowlogChangedTo != nil && !in.slowlogCheckPaused {
 			for c := range in.listeners { // only this instance
 				select {
 				case c <- *slowlogChangedTo:
@@ -184,6 +188,7 @@ func (m *RealMonitor) Check() {
 				}
 			}
 		}
+		in.RUnlock()
 
 		restarted, err := in.checker.Check()
 		if err != nil {
@@ -221,6 +226,22 @@ func (m *RealMonitor) ListenerCount(uuid string) uint {
 		return 0
 	}
 	return uint(len(i.listeners))
+}
+
+func (m *RealMonitor) SwitchSlowlogCheck(uuid string, on bool) {
+	m.logger.Debug("SwitchSlowlogCheck:call:" + uuid)
+	defer m.logger.Debug("SwitchSlowlogCheck:return:" + uuid)
+
+	i := m.instances[uuid]
+	if i == nil {
+		return
+	}
+
+	i.Lock()
+	defer i.Unlock()
+
+	m.logger.Debug("SwitchSlowlogCheck: slow_query_log monitoring for", uuid, "switched to", on)
+	i.slowlogCheckPaused = !on
 }
 
 /////////////////////////////////////////////////////////////////////////////

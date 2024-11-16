@@ -125,7 +125,7 @@ func (m *MySQLAnalyzer) Start() error {
 	analyzerType := config.CollectFrom
 	switch analyzerType {
 	case "slowlog":
-		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
+		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn, m.mrms)
 	case "perfschema":
 		worker = m.perfschemaWorkerFactory.Make(name+"-worker", mysqlConn, config)
 	case "rds-slowlog":
