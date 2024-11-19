@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/data"
-	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
@@ -47,7 +46,6 @@ type RealAnalyzer struct {
 	config    analyzer.QAN
 	iter      iter.IntervalIter
 	mysqlConn mysql.Connector
-	mrms      mrms.Monitor
 	mrmsChan  chan interface{}
 	worker    worker.Worker
 	clock     ticker.Manager
@@ -232,21 +230,6 @@ func (a *RealAnalyzer) setMySQLConfig() error {
 	return nil
 }
 
-func (a *RealAnalyzer) checkSlowLogManuallyOFF() error {
-	dbSlowLogBool, err := a.mysqlConn.GetGlobalVarBoolean("slow_query_log")
-	if err != nil {
-		return err
-	}
-	if !dbSlowLogBool.Bool || !boolValue(a.config.SlowLogManuallyOFF) {
-		return nil
-	}
-
-	manuallyOFF := false
-	a.config.SlowLogManuallyOFF = &manuallyOFF
-
-	return a.writeConfig()
-}
-
 func (a *RealAnalyzer) writeConfig() error {
 	configCopy := a.config
 	configCopy.Start = nil
@@ -300,11 +283,6 @@ func (a *RealAnalyzer) configureMySQL(action string, tryLimit int) {
 
 		if err := a.TakeOverPerconaServerRotation(); err != nil {
 			lastErr = fmt.Errorf("cannot takeover slow log rotation: %s", err)
-			continue
-		}
-
-		if err := a.checkSlowLogManuallyOFF(); err != nil {
-			lastErr = fmt.Errorf("cannot check slow log manually off: %s", err)
 			continue
 		}
 
@@ -455,6 +433,10 @@ func (a *RealAnalyzer) run() {
 			if isSlowLogData {
 				slowlogOFF := !SlowLogON
 				a.config.SlowLogManuallyOFF = &slowlogOFF
+				if a.config.CollectFrom == "rds-slowlog" || a.config.CollectFrom == "slowlog" {
+					a.setMySQLConfig()
+					a.worker.SetConfig(a.config)
+				}
 				if err := a.writeConfig(); err != nil {
 					a.logger.Error("Failed to write qan config %+v to disk: ", err)
 				} else if slowlogOFF {
@@ -499,7 +481,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 	// Let worker do whatever it needs before it starts processing
 	// the interval. This mostly makes testing easier.
 	if err := a.worker.Setup(interval, resultChan); err != nil {
-		a.logger.Warn(err)
+		a.logger.Error(err)
 		return
 	}
 
