@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +30,12 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/percona/go-mysql/dsn"
 	"github.com/shatteredsilicon/qan-agent/pct"
+)
+
+const (
+	DistroMySQL   = "MySQL"
+	DistroPercona = "Percona Server"
+	DistroMariaDB = "MariaDB"
 )
 
 var (
@@ -266,15 +273,24 @@ func (c *Connection) UTCOffset() (time.Duration, time.Duration, error) {
 	return time.Duration(curHours) * time.Hour, time.Duration(sysHours) * time.Hour, nil
 }
 
-var rePerconaServer = regexp.MustCompile("(?i)Percona Server")
-var reMariaDB = regexp.MustCompile("(?i)MariaDB")
+var rePerconaServer = regexp.MustCompile(fmt.Sprintf("(?i)%s", DistroPercona))
+var reMariaDB = regexp.MustCompile(fmt.Sprintf("(?i)%s", DistroMariaDB))
 
-func Distro(distro string) string {
+func ParseDistro(distro string) string {
 	if rePerconaServer.Match([]byte(distro)) {
-		return "Percona Server"
+		return DistroPercona
 	} else if reMariaDB.Match([]byte(distro)) {
-		return "MariaDB"
+		return DistroMariaDB
 	} else {
-		return "MySQL"
+		return DistroMySQL
 	}
+}
+
+func ParseVersion(version string) string {
+	v, err := semver.NewVersion(strings.SplitN(version, "-", 2)[0])
+	if err != nil {
+		return ""
+	}
+
+	return fmt.Sprintf("%d.%d.%d", v.Major(), v.Minor(), v.Patch())
 }

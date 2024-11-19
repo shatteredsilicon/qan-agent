@@ -452,17 +452,36 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 	}
 	defer w.mysqlConn.Close()
 
-	// Stop slow log so we don't move it while MySQL is using it.
-	if err := w.mysqlConn.Exec(w.config.Stop); err != nil {
+	versionStr, err := w.mysqlConn.GetGlobalVarString("version")
+	if err != nil {
 		return err
+	}
+
+	distro := mysql.ParseDistro(versionStr.String)
+	version := mysql.ParseVersion(versionStr.String)
+
+	fastRotate := distro != mysql.DistroMariaDB || (version != "" && version < "10.4")
+	if !fastRotate {
+		// Stop slow log so we don't move it while MySQL is using it.
+		if err := w.mysqlConn.Exec(w.config.Stop); err != nil {
+			return err
+		}
 	}
 
 	// Move current slow log by renaming it.
 	newSlowLogFile := fmt.Sprintf("%s-%d", interval.Filename, time.Now().UTC().Unix())
 	renameErr := os.Rename(interval.Filename, newSlowLogFile)
 
-	// Re-enable slow log.
-	startErr := w.mysqlConn.Exec(w.config.Start)
+	var postErr error
+	if fastRotate {
+		if err := w.mysqlConn.Exec([]string{"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS"}); err != nil {
+			// MySQL 5.1 support.
+			postErr = w.mysqlConn.Exec([]string{"FLUSH LOGS"})
+		}
+	} else {
+		// Re-enable slow log.
+		postErr = w.mysqlConn.Exec(w.config.Start)
+	}
 
 	if renameErr != nil {
 		return renameErr
@@ -473,15 +492,8 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 	interval.Filename = newSlowLogFile
 	interval.EndOffset, _ = pct.FileSize(newSlowLogFile) // todo: handle err
 
-	if startErr != nil {
-		return startErr
-	}
-
-	if err := w.mysqlConn.Exec([]string{"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS"}); err != nil {
-		// MySQL 5.1 support.
-		if err := w.mysqlConn.Exec([]string{"FLUSH LOGS"}); err != nil {
-			return err
-		}
+	if postErr != nil {
+		return postErr
 	}
 
 	// Purge old slow logs.
