@@ -20,7 +20,6 @@ package report
 import (
 	"encoding/json"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -40,7 +39,6 @@ type Result struct {
 	RateLimit  uint           // Percona Server rate limit
 	RunTime    float64        // seconds parsing data, hopefully < interval
 	StopOffset int64          // slow log offset where parsing stopped, should be <= end offset
-	Error      string         `json:",omitempty"`
 	StartTime  time.Time
 	EndTime    time.Time
 }
@@ -142,20 +140,6 @@ func MergeResult(destResult, srcResult Result) Result {
 	destResult.RunTime += srcResult.RunTime
 	if srcResult.StopOffset > destResult.StopOffset {
 		destResult.StopOffset = srcResult.StopOffset
-	}
-	if len(srcResult.Error) > 0 {
-		if len(destResult.Error) > 0 {
-			destResult.Error = strings.Join([]string{destResult.Error, srcResult.Error}, " | ")
-		} else {
-			destResult.Error = srcResult.Error
-		}
-	}
-
-	if destResult.StartTime.IsZero() {
-		destResult.StartTime = srcResult.StartTime
-	}
-	if destResult.EndTime.Before(srcResult.EndTime) {
-		destResult.EndTime = srcResult.EndTime
 	}
 
 	return destResult

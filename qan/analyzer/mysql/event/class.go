@@ -135,6 +135,13 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 			})
 		}
 	}
+
+	if !e.Ts.IsZero() && (c.StartAt.IsZero() || e.Ts.Before(c.StartAt)) {
+		c.StartAt = e.Ts
+	}
+	if !e.Ts.IsZero() && e.Ts.After(c.EndAt) {
+		c.EndAt = e.Ts
+	}
 }
 
 // AddClass adds a Class to the current class. This is used with pre-aggregated classes.

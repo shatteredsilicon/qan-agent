@@ -53,7 +53,6 @@ const (
 	longQueryTimeMultiple      = 2
 	rateLmitMaximumTimes       = 2
 	minimumLongQueryTime       = 0.001
-	maxResultSeconds           = 5
 	defaultThrottlingRetention = 7 * 24 * time.Hour // 7 days
 )
 
@@ -151,7 +150,6 @@ type Worker struct {
 	ignoreRateLimit        bool        // wether to ignore rate limit error or not
 	rateLimitLongQueryTime float64     // stores the long_query_time value at the moment that rate limit happened
 	rateLimitTimestamps    []time.Time // stores the timestamps when the historical rate limit happened
-	lastStartTime          time.Time
 }
 
 func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connector) *Worker {
@@ -488,34 +486,22 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 	go runFingerPrinter()
 	defer func() { w.doneChan <- true }()
 
-	var lastStartTime time.Time
-	defer func() {
-		if !lastStartTime.IsZero() {
-			w.lastStartTime = lastStartTime
-		}
-	}()
-	sendResult := func(result *report.Result, aggregator *mysqlEvent.Aggregator, lastWritten int64) {
+	sendResult := func(aggregator *mysqlEvent.Aggregator) {
 		r := aggregator.Finalize()
 
 		// The aggregator result is a map, but we need an array of classes for
 		// the query report, so convert it.
-		n := len(r.Class)
-		classes := make([]*mysqlEvent.Class, n)
-		for _, class := range r.Class {
-			n-- // can't classes[--n] in Go
-			classes[n] = class
-		}
-		result.Global = r.Global
-		result.Class = classes
-		if !w.lastStartTime.IsZero() {
-			if w.lastStartTime.Unix() <= result.StartTime.Unix() {
-				result.StartTime = result.StartTime.Add(time.Second)
+		classes := make([]*mysqlEvent.Class, 0)
+		for _, cs := range r.Class {
+			for _, c := range cs {
+				classes = append(classes, c)
 			}
-			w.lastStartTime = time.Time{}
 		}
-		result.EndTime = time.Unix(0, int64(time.Millisecond)*lastWritten)
+		result := &report.Result{
+			Global: r.Global,
+			Class:  classes,
+		}
 		w.resultChan <- result
-		lastStartTime = result.StartTime
 	}
 
 EVENT_LOOP:
@@ -609,20 +595,15 @@ EVENT_LOOP:
 			// Create a slow log parser and run it.  It sends log.Event via its channel.
 			// Be sure to stop it when done, else we'll leak goroutines.
 			p = w.MakeLogParser([]byte(completeLog), logParserOpts)
-			result := &report.Result{
-				StartTime: time.Unix(0, int64(time.Millisecond)*(*w.LastWritten)),
-			}
 			go func() {
 				defer func() {
 					if err := recover(); err != nil {
-						result.Error = fmt.Sprintf("Slow log parser for %s crashed: %s", w.job, err)
-						w.logger.Error(result.Error)
+						w.logger.Error(fmt.Sprintf("Slow log parser for %s crashed: %s", w.job, err))
 					}
 				}()
 
 				if err := p.Start(); err != nil {
 					w.logger.Warn(err)
-					result.Error = err.Error()
 				}
 			}()
 
@@ -634,6 +615,10 @@ EVENT_LOOP:
 			// queries, group, and aggregate.
 			aggregator := mysqlEvent.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
 			for event := range p.EventChan() {
+				if event.Ts.IsZero() {
+					event.Ts = time.Now()
+				}
+
 				// Stop if Stop() called.
 				select {
 				case <-w.sync.StopChan:
@@ -644,20 +629,9 @@ EVENT_LOOP:
 				}
 
 				lastWritten := event.Ts
-				if event.Ts.IsZero() {
-					// Have to set it to NOW()
-					lastWritten = time.Now()
-				}
-				if lastWritten.Before(result.StartTime) {
-					continue
-				}
-
-				if lastWritten.Sub(result.StartTime).Seconds() >= maxResultSeconds {
+				if aggregator.ShouldFinalize(event) {
 					// send a result in this case for record purpose
-					sendResult(result, aggregator, *w.LastWritten)
-					result = &report.Result{
-						StartTime: time.Unix(0, int64(time.Millisecond)*(*w.LastWritten)),
-					}
+					sendResult(aggregator)
 					aggregator = mysqlEvent.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
 				}
 				lastWrittenMilli := lastWritten.UnixMilli()
@@ -683,7 +657,6 @@ EVENT_LOOP:
 							errMsg := fmt.Sprintf("Slow log has mixed rate limits: %s/%d and %s/%d",
 								rateType, rateLimit, event.RateType, event.RateLimit)
 							w.logger.Warn(errMsg)
-							result.Error = errMsg
 							break EVENT_LOOP
 						}
 					} else {
@@ -722,7 +695,7 @@ EVENT_LOOP:
 				w.status.Update(w.name, "Finalizing job "+w.job.ID+", file "+*file.LogFileName)
 			}
 
-			sendResult(result, aggregator, *w.LastWritten)
+			sendResult(aggregator)
 
 			record.previousData = []byte{}
 			if dataOutput.Marker != nil {

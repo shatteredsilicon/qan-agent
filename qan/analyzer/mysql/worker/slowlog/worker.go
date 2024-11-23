@@ -37,10 +37,6 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
-const (
-	defaultResultSize = 1000
-)
-
 type WorkerFactory interface {
 	Make(name string, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor) *Worker
 }
@@ -65,7 +61,6 @@ func (f *RealWorkerFactory) Make(name string, config analyzer.QAN, mysqlConn mys
 type Job struct {
 	Id             string
 	SlowLogFile    string
-	RunTime        time.Duration
 	StartOffset    int64
 	EndOffset      int64
 	ExampleQueries bool
@@ -168,14 +163,12 @@ func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) 
 		}
 	}
 
-	workerRunTime := time.Duration(uint(float64(w.config.Interval)*0.9)) * time.Second // 90% of interval
 	// Create new Job.
 	w.job = &Job{
 		Id:             fmt.Sprintf("%d", interval.Number),
 		SlowLogFile:    interval.Filename,
 		StartOffset:    interval.StartOffset,
 		EndOffset:      interval.EndOffset,
-		RunTime:        workerRunTime,
 		ExampleQueries: boolValue(w.config.ExampleQueries),
 		RetainSlowLogs: intValue(w.config.RetainSlowLogs),
 	}
@@ -224,12 +217,10 @@ func (w *Worker) Run() (*report.Result, error) {
 			if err := recover(); err != nil {
 				errMsg := fmt.Sprintf("Slow log parser for %s crashed: %s", w.job, err)
 				w.logger.Error(errMsg)
-				result.Error = errMsg
 			}
 		}()
 		if err := p.Start(); err != nil {
 			w.logger.Warn(err)
-			result.Error = err.Error()
 		}
 	}()
 	defer p.Stop()
@@ -250,11 +241,11 @@ func (w *Worker) Run() (*report.Result, error) {
 
 		// The aggregator result is a map, but we need an array of classes for
 		// the query report, so convert it.
-		n := len(r.Class)
-		classes := make([]*event.Class, n)
-		for _, class := range r.Class {
-			n-- // can't classes[--n] in Go
-			classes[n] = class
+		classes := make([]*event.Class, 0)
+		for _, cs := range r.Class {
+			for _, c := range cs {
+				classes = append(classes, c)
+			}
 		}
 		res.Global = r.Global
 		res.Class = classes
@@ -270,7 +261,6 @@ func (w *Worker) Run() (*report.Result, error) {
 	defer func() { w.doneChan <- true }()
 
 	t0 := time.Now().UTC()
-	resultSize := 0
 EVENT_LOOP:
 	for e := range p.EventChan() {
 		runtime = time.Now().UTC().Sub(t0)
@@ -278,14 +268,17 @@ EVENT_LOOP:
 			float64(e.Offset)/float64(w.job.EndOffset)*100, e.Offset, w.job.EndOffset, jobSize, runtime.Seconds())
 		w.status.Update(w.name, fmt.Sprintf("Parsing %s: %s", w.job.SlowLogFile, progress))
 
-		if resultSize >= defaultResultSize {
+		if e.Ts.IsZero() {
+			e.Ts = time.Now()
+		}
+
+		if aggregator.ShouldFinalize(e) {
 			sendResult(aggregator, result)
 			aggregator = event.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
 			result = &report.Result{
 				RateLimit:  rateLimit,
 				StopOffset: result.StopOffset,
 			}
-			resultSize = 0
 		}
 
 		// Stop if Stop() called.
@@ -300,14 +293,6 @@ EVENT_LOOP:
 		// ignore empty query
 		if len(e.Query) == 0 || e.Query == ";" {
 			continue
-		}
-
-		// Stop if runtime exceeded.
-		if runtime >= w.job.RunTime {
-			errMsg := fmt.Sprintf("Timeout parsing %s: %s", w.job, progress)
-			w.logger.Warn(errMsg)
-			result.Error = errMsg
-			break EVENT_LOOP
 		}
 
 		// Stop if past file end offset. This happens often because we parse
@@ -329,7 +314,6 @@ EVENT_LOOP:
 					errMsg := fmt.Sprintf("Slow log has mixed rate limits: %s/%d and %s/%d",
 						rateType, rateLimit, e.RateType, e.RateLimit)
 					w.logger.Warn(errMsg)
-					result.Error = errMsg
 					break EVENT_LOOP
 				}
 			} else {
@@ -342,7 +326,6 @@ EVENT_LOOP:
 		// fingerprinter crashes, start it again and skip this event.
 		var fingerprint string
 		w.queryChan <- e.Query
-		resultSize++
 		select {
 		case fingerprint = <-w.fingerprintChan:
 			// check if query should be omitted first

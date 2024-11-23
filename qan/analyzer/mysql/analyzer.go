@@ -350,6 +350,7 @@ func (a *RealAnalyzer) run() {
 	workerRunning := false
 	lastTs := time.Time{}
 	currentInterval := &iter.Interval{}
+	missedStartOffset := int64(-1)
 	for {
 		a.logger.Debug("run:idle")
 		if mysqlConfigured {
@@ -372,12 +373,20 @@ func (a *RealAnalyzer) run() {
 			if workerRunning {
 				a.logger.Warn(fmt.Sprintf("Skipping interval '%s' because interval '%s' is still being parsed",
 					interval, currentInterval))
+				if missedStartOffset == -1 {
+					missedStartOffset = interval.StartOffset
+				}
 				continue
 			}
 
 			a.status.Update(a.name, fmt.Sprintf("Starting interval '%s'", interval))
 			a.logger.Debug(fmt.Sprintf("run:interval:%s", interval))
 			currentInterval = interval
+			if interval.StartOffset > 0 && missedStartOffset != -1 {
+				// There are missed intervals, use the missed StartOffset instead
+				currentInterval.StartOffset = int64(missedStartOffset)
+			}
+			missedStartOffset = -1
 
 			// Run the worker, timing it, make a report from its results, spool
 			// the report. When done the interval is returned on workerDoneChan.
@@ -510,54 +519,15 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 			}
 		}()
 
-		makeReport := func(t0, t1 time.Time, result *report.Result) {
-			if t1.Sub(t0).Seconds() < 1 {
-				t1 = t0.Add(time.Second)
-			}
-			rep := report.MakeReport(a.config.QAN, t0, t1, interval, result, a.logger)
-			if err := a.spool.Write("qan", rep); err != nil {
-				a.logger.Warn("Lost report:", err)
-			}
-		}
-
-		startEndTime := func(t0 time.Time, t1 time.Time, result report.Result) (time.Time, time.Time) {
-			if !result.StartTime.IsZero() {
-				t0 = result.StartTime
-			}
-			if !result.EndTime.IsZero() {
-				t1 = result.EndTime
-			}
-			return t0, t1
-		}
-
-		result := report.Result{}
 		for res := range resultChan {
 			if res == nil || len(res.Class) == 0 {
 				continue
 			}
 
-			newResult := *res
-			if res.StartTime.IsZero() || result.StartTime.IsZero() || res.StartTime.Unix() <= result.StartTime.Unix() {
-				result = report.MergeResult(result, *res)
-				newResult = report.Result{}
+			resp := report.MakeReport(a.config.QAN, res.StartTime, res.EndTime, interval, res, a.logger)
+			if err := a.spool.Write("qan", resp); err != nil {
+				a.logger.Warn("Lost report:", err)
 			}
-
-			t1 := time.Now()
-			t0, t1 = startEndTime(t0, t1, result)
-			if result.StartTime.IsZero() && t1.Sub(t0).Seconds() < 1 {
-				continue
-			}
-
-			makeReport(t0, t1, &result)
-
-			result = newResult
-			t0 = t1
-		}
-
-		if len(result.Class) > 0 {
-			t1 := time.Now()
-			t0, t1 = startEndTime(t0, t1, result)
-			makeReport(t0, t1, &result)
 		}
 	} else {
 		// Run the worker to process the interval.
