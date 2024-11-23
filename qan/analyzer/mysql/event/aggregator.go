@@ -36,25 +36,32 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 )
 
+const (
+	defaultTsLength = 60
+	maxEventSize    = 1024 * 1024
+)
+
 // A Result contains a global class and per-ID classes with finalized metric
 // statistics. The classes are keyed on class ID.
 type Result struct {
-	Global    *Class            // all classes
-	Class     map[string]*Class // keyed on class ID
+	Global    *Class                      // all classes
+	Class     map[int64]map[string]*Class // keyed on class ID
 	RateLimit uint
 	Error     string
 }
 
 // An Aggregator groups events by class ID. When there are no more events,
 // a call to Finalize computes all metric statistics and returns a Result.
+// Aggregator is supposed to groups events that happened in a same unix second only.
 type Aggregator struct {
 	samples     bool
 	utcOffset   time.Duration
 	outlierTime float64
 	// --
 	global    *Class
-	classes   map[string]*Class
+	classes   map[int64]map[string]*Class
 	rateLimit uint
+	eventSize int64
 }
 
 // NewAggregator returns a new Aggregator.
@@ -66,7 +73,7 @@ func NewAggregator(samples bool, utcOffset time.Duration, outlierTime float64) *
 		outlierTime: outlierTime,
 		// --
 		global:  NewClass("", "", false),
-		classes: make(map[string]*Class),
+		classes: make(map[int64]map[string]*Class),
 	}
 	return a
 }
@@ -76,6 +83,12 @@ func NewAggregator(samples bool, utcOffset time.Duration, outlierTime float64) *
 func (a *Aggregator) AddEvent(event *log.Event, id, fingerprint string) {
 	if a.rateLimit != event.RateLimit {
 		a.rateLimit = event.RateLimit
+	}
+
+	classes, ok := a.classes[event.Ts.Unix()]
+	if !ok {
+		classes = make(map[string]*Class)
+		a.classes[event.Ts.Unix()] = classes
 	}
 
 	outlier := false
@@ -90,12 +103,14 @@ func (a *Aggregator) AddEvent(event *log.Event, id, fingerprint string) {
 	globalEvent.Host = ""
 	a.global.AddEvent(&globalEvent, outlier)
 
-	class, ok := a.classes[id]
+	class, ok := classes[id]
 	if !ok {
 		class = NewClass(id, fingerprint, a.samples)
-		a.classes[id] = class
+		classes[id] = class
 	}
 	class.AddEvent(event, outlier)
+
+	a.eventSize++
 }
 
 // Finalize calculates all metric statistics and returns a Result.
@@ -103,14 +118,18 @@ func (a *Aggregator) AddEvent(event *log.Event, id, fingerprint string) {
 func (a *Aggregator) Finalize() Result {
 	a.global.Finalize(a.rateLimit)
 	a.global.UniqueQueries = uint(len(a.classes))
-	for _, class := range a.classes {
-		class.Finalize(a.rateLimit)
-		class.UniqueQueries = 1
-		if class.Example != nil && class.Example.Ts != "" {
-			if t, err := time.Parse("2006-01-02 15:04:05", class.Example.Ts); err != nil {
-				class.Example.Ts = ""
-			} else {
-				class.Example.Ts = t.Add(a.utcOffset).Format("2006-01-02 15:04:05")
+	for unixTs, classes := range a.classes {
+		for _, class := range classes {
+			class.StartAt = time.Unix(unixTs, 0)
+			class.EndAt = class.StartAt
+			class.Finalize(a.rateLimit)
+			class.UniqueQueries = 1
+			if class.Example != nil && class.Example.Ts != "" {
+				if t, err := time.Parse("2006-01-02 15:04:05", class.Example.Ts); err != nil {
+					class.Example.Ts = ""
+				} else {
+					class.Example.Ts = t.Add(a.utcOffset).Format("2006-01-02 15:04:05")
+				}
 			}
 		}
 	}
@@ -119,4 +138,10 @@ func (a *Aggregator) Finalize() Result {
 		Class:     a.classes,
 		RateLimit: a.rateLimit,
 	}
+}
+
+// ShouldFinalize checks whether it should finialize before
+// adding a new event
+func (a *Aggregator) ShouldFinalize(event *log.Event) bool {
+	return a.classes[event.Ts.Unix()] == nil && len(a.classes) >= defaultTsLength || a.eventSize >= maxEventSize
 }
