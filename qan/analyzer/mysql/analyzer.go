@@ -462,6 +462,9 @@ func (a *RealAnalyzer) run() {
 					go a.configureMySQL("start", 0) // try forever
 				}
 			}
+		case <-a.iter.ReconfigurateChan():
+			mysqlConfigured = false
+			go a.configureMySQL("start", 0)
 		case <-a.closeChan:
 			a.logger.Debug("run:stop")
 			return
