@@ -30,9 +30,10 @@ type Iter struct {
 	logger   *pct.Logger
 	tickChan chan time.Time
 	// --
-	intervalNo   int
-	intervalChan chan *iter.Interval
-	sync         *pct.SyncChan
+	intervalNo        int
+	intervalChan      chan *iter.Interval
+	sync              *pct.SyncChan
+	reconfigurateChan chan struct{}
 }
 
 func NewIter(logger *pct.Logger, tickChan chan time.Time) *Iter {
@@ -40,8 +41,9 @@ func NewIter(logger *pct.Logger, tickChan chan time.Time) *Iter {
 		logger:   logger,
 		tickChan: tickChan,
 		// --
-		intervalChan: make(chan *iter.Interval, 1),
-		sync:         pct.NewSyncChan(),
+		intervalChan:      make(chan *iter.Interval, 1),
+		sync:              pct.NewSyncChan(),
+		reconfigurateChan: make(chan struct{}),
 	}
 	return iter
 }
@@ -62,6 +64,10 @@ func (i *Iter) IntervalChan() chan *iter.Interval {
 
 func (i *Iter) TickChan() chan time.Time {
 	return i.tickChan
+}
+
+func (i *Iter) ReconfigurateChan() chan struct{} {
+	return i.reconfigurateChan
 }
 
 // --------------------------------------------------------------------------

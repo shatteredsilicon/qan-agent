@@ -48,21 +48,23 @@ func (tf *IntervalIterFactory) Reset() {
 // --------------------------------------------------------------------------
 
 type Iter struct {
-	testIntervalChan chan *iter.Interval
-	intervalChan     chan *iter.Interval
-	sync             *pct.SyncChan
-	tickChan         chan time.Time
-	calls            []string
+	testIntervalChan  chan *iter.Interval
+	intervalChan      chan *iter.Interval
+	sync              *pct.SyncChan
+	tickChan          chan time.Time
+	calls             []string
+	reconfigurateChan chan struct{}
 }
 
 func NewIter(intervalChan chan *iter.Interval) *Iter {
 	iter := &Iter{
 		testIntervalChan: intervalChan,
 		// --
-		intervalChan: make(chan *iter.Interval, 1),
-		sync:         pct.NewSyncChan(),
-		tickChan:     make(chan time.Time),
-		calls:        []string{},
+		intervalChan:      make(chan *iter.Interval, 1),
+		sync:              pct.NewSyncChan(),
+		tickChan:          make(chan time.Time),
+		calls:             []string{},
+		reconfigurateChan: make(chan struct{}),
 	}
 	return iter
 }
@@ -84,6 +86,10 @@ func (i *Iter) IntervalChan() chan *iter.Interval {
 
 func (i *Iter) TickChan() chan time.Time {
 	return i.tickChan
+}
+
+func (i *Iter) ReconfigurateChan() chan struct{} {
+	return i.reconfigurateChan
 }
 
 func (i *Iter) run() {

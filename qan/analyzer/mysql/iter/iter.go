@@ -49,6 +49,7 @@ type IntervalIter interface {
 	Stop()
 	IntervalChan() chan *Interval
 	TickChan() chan time.Time
+	ReconfigurateChan() chan struct{}
 }
 
 // An IntervalIterFactory makes an IntervalIter, real or mock.

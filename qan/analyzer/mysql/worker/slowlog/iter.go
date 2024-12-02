@@ -33,9 +33,10 @@ type Iter struct {
 	filename FilenameFunc
 	tickChan chan time.Time
 	// --
-	intervalNo   int
-	intervalChan chan *iter.Interval
-	sync         *pct.SyncChan
+	intervalNo        int
+	intervalChan      chan *iter.Interval
+	sync              *pct.SyncChan
+	reconfigurateChan chan struct{}
 }
 
 func NewIter(logger *pct.Logger, filename FilenameFunc, tickChan chan time.Time) *Iter {
@@ -44,8 +45,9 @@ func NewIter(logger *pct.Logger, filename FilenameFunc, tickChan chan time.Time)
 		filename: filename,
 		tickChan: tickChan,
 		// --
-		intervalChan: make(chan *iter.Interval, 1),
-		sync:         pct.NewSyncChan(),
+		intervalChan:      make(chan *iter.Interval, 1),
+		sync:              pct.NewSyncChan(),
+		reconfigurateChan: make(chan struct{}),
 	}
 	return iter
 }
@@ -66,6 +68,10 @@ func (i *Iter) IntervalChan() chan *iter.Interval {
 
 func (i *Iter) TickChan() chan time.Time {
 	return i.tickChan
+}
+
+func (i *Iter) ReconfigurateChan() chan struct{} {
+	return i.reconfigurateChan
 }
 
 // --------------------------------------------------------------------------
@@ -100,6 +106,12 @@ func (i *Iter) run() {
 			i.logger.Debug("run:file size")
 			curSize, err := pct.FileSize(curFile)
 			if err != nil {
+				if os.IsNotExist(err) {
+					// slow log file doesn't exist, reconfigurate mysql
+					i.reconfigurateChan <- struct{}{}
+					return
+				}
+
 				i.logger.Warn(err)
 				cur = new(iter.Interval)
 				continue
