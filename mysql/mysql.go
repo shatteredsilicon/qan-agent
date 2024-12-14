@@ -108,6 +108,10 @@ func (c *Connection) Connect() error {
 		return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(c.dsn), FormatError(err))
 	}
 
+	db.SetConnMaxLifetime(time.Minute * 3)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+
 	c.conn = db
 	c.connected = true
 	return nil
