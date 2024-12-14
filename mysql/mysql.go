@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -284,13 +283,4 @@ func ParseDistro(distro string) string {
 	} else {
 		return DistroMySQL
 	}
-}
-
-func ParseVersion(version string) string {
-	v, err := semver.NewVersion(strings.SplitN(version, "-", 2)[0])
-	if err != nil {
-		return ""
-	}
-
-	return fmt.Sprintf("%d.%d.%d", v.Major(), v.Minor(), v.Patch())
 }

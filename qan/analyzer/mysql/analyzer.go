@@ -244,7 +244,7 @@ func (a *RealAnalyzer) writeConfig() error {
 	return nil
 }
 
-func (a *RealAnalyzer) configureMySQL(action string, tryLimit int) {
+func (a *RealAnalyzer) configureMySQL(action string, tryLimit int, reconfigurate bool) {
 	a.logger.Debug("configureMySQL:" + action + ":call")
 	defer func() {
 		select {
@@ -322,7 +322,7 @@ func (a *RealAnalyzer) run() {
 	defer a.logger.Debug("run:return")
 
 	mysqlConfigured := false
-	go a.configureMySQL("start", 0) // try forever
+	go a.configureMySQL("start", 0, false) // try forever
 
 	defer func() {
 		a.logger.Info("Stopping")
@@ -335,7 +335,7 @@ func (a *RealAnalyzer) run() {
 			a.iter.Stop()
 
 			a.status.Update(a.name, "Stopping QAN on MySQL")
-			a.configureMySQL("stop", 1) // try once
+			a.configureMySQL("stop", 1, false) // try once
 		}
 
 		if err := recover(); err != nil {
@@ -351,6 +351,7 @@ func (a *RealAnalyzer) run() {
 	lastTs := time.Time{}
 	currentInterval := &iter.Interval{}
 	missedStartOffset := int64(-1)
+	intervalSkipped := false
 	for {
 		a.logger.Debug("run:idle")
 		if mysqlConfigured {
@@ -376,6 +377,7 @@ func (a *RealAnalyzer) run() {
 				if missedStartOffset == -1 {
 					missedStartOffset = interval.StartOffset
 				}
+				intervalSkipped = true
 				continue
 			}
 
@@ -406,6 +408,18 @@ func (a *RealAnalyzer) run() {
 					a.status.Update(a.name+"-last-interval", fmt.Sprintf("%s", t0))
 				}
 				lastTs = interval.StartTime
+			}
+
+			tickChan := a.iter.TickChan()
+			t := a.clock.ETA(tickChan)
+			if intervalSkipped && t >= 1 {
+				began := ticker.Began(a.config.Interval, uint(time.Now().UTC().Unix()))
+				select {
+				case tickChan <- began:
+				case <-time.After(1 * time.Second):
+					// leave it to next interval
+				}
+				intervalSkipped = false
 			}
 		case mysqlConfigured = <-a.mysqlConfiguredChan:
 			a.logger.Debug("run:mysql:configured")
@@ -459,12 +473,12 @@ func (a *RealAnalyzer) run() {
 				if mysqlConfigured {
 					mysqlConfigured = false
 					a.iter.Stop()
-					go a.configureMySQL("start", 0) // try forever
+					go a.configureMySQL("start", 0, false) // try forever
 				}
 			}
 		case <-a.iter.ReconfigurateChan():
 			mysqlConfigured = false
-			go a.configureMySQL("start", 0)
+			go a.configureMySQL("start", 0, true)
 		case <-a.closeChan:
 			a.logger.Debug("run:stop")
 			return

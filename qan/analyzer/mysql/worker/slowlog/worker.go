@@ -441,9 +441,10 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 	}
 
 	distro := mysql.ParseDistro(versionStr.String)
-	version := mysql.ParseVersion(versionStr.String)
-
-	fastRotate := distro != mysql.DistroMariaDB || (version != "" && version < "10.4")
+	var fastRotate bool
+	if vb, err := pct.AtLeastVersion(versionStr.String, "10.4"); distro != mysql.DistroMariaDB || (err == nil && !vb) {
+		fastRotate = true
+	}
 	if !fastRotate {
 		// Stop slow log so we don't move it while MySQL is using it.
 		if err := w.mysqlConn.Exec(w.config.Stop); err != nil {
