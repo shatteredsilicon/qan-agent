@@ -109,7 +109,7 @@ func (i *Iter) run() {
 				if os.IsNotExist(err) {
 					// slow log file doesn't exist, reconfigurate mysql
 					i.reconfigurateChan <- struct{}{}
-					return
+					continue
 				}
 
 				i.logger.Warn(err)

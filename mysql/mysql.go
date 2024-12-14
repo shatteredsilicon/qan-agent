@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -108,6 +107,10 @@ func (c *Connection) Connect() error {
 		db.Close()
 		return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(c.dsn), FormatError(err))
 	}
+
+	db.SetConnMaxLifetime(time.Minute * 3)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
 
 	c.conn = db
 	c.connected = true
@@ -284,13 +287,4 @@ func ParseDistro(distro string) string {
 	} else {
 		return DistroMySQL
 	}
-}
-
-func ParseVersion(version string) string {
-	v, err := semver.NewVersion(strings.SplitN(version, "-", 2)[0])
-	if err != nil {
-		return ""
-	}
-
-	return fmt.Sprintf("%d.%d.%d", v.Major(), v.Minor(), v.Patch())
 }
