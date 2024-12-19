@@ -457,14 +457,20 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 	renameErr := os.Rename(interval.Filename, newSlowLogFile)
 
 	var postErr error
-	if fastRotate {
-		if err := w.mysqlConn.Exec([]string{"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS"}); err != nil {
-			// MySQL 5.1 support.
-			postErr = w.mysqlConn.Exec([]string{"FLUSH LOGS"})
+	// Try to reconnect if it's not connected, because if the above
+	// progress takes too long, the connection might be closed by other goroutines.
+	// Which implys that we need a better management of DB connections.
+	// TODO: Refactor the DB connection management
+	if postErr = w.mysqlConn.Connect(); postErr == nil {
+		if fastRotate {
+			if err := w.mysqlConn.Exec([]string{"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS"}); err != nil {
+				// MySQL 5.1 support.
+				postErr = w.mysqlConn.Exec([]string{"FLUSH LOGS"})
+			}
+		} else {
+			// Re-enable slow log.
+			postErr = w.mysqlConn.Exec(w.config.Start)
 		}
-	} else {
-		// Re-enable slow log.
-		postErr = w.mysqlConn.Exec(w.config.Start)
 	}
 
 	if renameErr != nil {
