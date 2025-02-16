@@ -103,6 +103,14 @@ func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Inte
 
 	// Low-ranking Queries
 	lrq := event.NewClass("lrq", "/* low-ranking queries */", false)
+
+	// Set timestamps of lrq query class to a proper 'zero' time,
+	// so it fits database's NO_ZERO_DATE restriction or
+	// something like that.
+	lrq.StartAt = time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC)
+	lrq.EndAt = time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC)
+	lrq.Example.Ts = lrq.StartAt.UTC().Format(time.DateTime)
+
 	for _, class := range result.Class[config.ReportLimit:n] {
 		lrq.AddClass(class)
 	}
