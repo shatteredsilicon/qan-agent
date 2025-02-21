@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
@@ -145,6 +146,7 @@ func classicExplain(c mysql.Connector, tx *sql.Tx, query string) (classicExplain
 
 	for rows.Next() {
 		explainRow := &proto.ExplainRow{}
+		var rowsStr proto.NullString
 		switch nCols {
 		case 10:
 			err = rows.Scan(
@@ -156,7 +158,7 @@ func classicExplain(c mysql.Connector, tx *sql.Tx, query string) (classicExplain
 				&explainRow.Key,
 				&explainRow.KeyLen,
 				&explainRow.Ref,
-				&explainRow.Rows,
+				&rowsStr,
 				&explainRow.Extra,
 			)
 		case 11: // MySQL 5.1 with "partitions"
@@ -170,7 +172,7 @@ func classicExplain(c mysql.Connector, tx *sql.Tx, query string) (classicExplain
 				&explainRow.Key,
 				&explainRow.KeyLen,
 				&explainRow.Ref,
-				&explainRow.Rows,
+				&rowsStr,
 				&explainRow.Extra,
 			)
 		case 12: // MySQL 5.7 with "filtered"
@@ -184,13 +186,29 @@ func classicExplain(c mysql.Connector, tx *sql.Tx, query string) (classicExplain
 				&explainRow.Key,
 				&explainRow.KeyLen,
 				&explainRow.Ref,
-				&explainRow.Rows,
+				&rowsStr,
 				&explainRow.Filtered, // here
 				&explainRow.Extra,
 			)
 		}
 		if err != nil {
 			return nil, err
+		}
+		if rowsStr.Valid {
+			if m := regexp.MustCompile(`^(\d+)\s*\((\d+)%?\)`).FindStringSubmatch(rowsStr.String); len(m) == 3 {
+				explainRow.Rows.Int64, _ = strconv.ParseInt(m[1], 10, 64)
+				explainRow.Rows.Valid = true
+				if !explainRow.Filtered.Valid {
+					explainRow.Filtered.Float64, _ = strconv.ParseFloat(m[2], 64)
+					explainRow.Filtered.Valid = true
+				}
+			} else {
+				explainRow.Rows.Int64, err = strconv.ParseInt(rowsStr.String, 10, 64)
+				if err != nil {
+					return nil, err
+				}
+				explainRow.Rows.Valid = true
+			}
 		}
 		classicExplain = append(classicExplain, explainRow)
 	}
