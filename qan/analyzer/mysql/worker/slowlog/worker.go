@@ -272,6 +272,16 @@ EVENT_LOOP:
 			e.Ts = time.Now()
 		}
 
+		if e.Ts.Unix() == 0 ||
+			e.NumberMetrics["Rows_sent"] > uint64(1<<63) ||
+			e.NumberMetrics["Rows_examined"] > uint64(1<<63) ||
+			e.NumberMetrics["Rows_affected"] > uint64(1<<63) ||
+			e.NumberMetrics["Bytes_sent"] > uint64(1<<63) {
+			// invalid log entry, ignore it
+			w.logger.Debug("Parsed an invalid slow log entry: ", e)
+			continue
+		}
+
 		if aggregator.ShouldFinalize(e) {
 			sendResult(aggregator, result)
 			aggregator = event.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)

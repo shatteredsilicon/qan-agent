@@ -86,7 +86,7 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 	}
 	if c.Sample {
 		if n, ok := e.TimeMetrics["Query_time"]; ok {
-			if float64(n) > c.Example.QueryTime {
+			if float64(n) >= c.Example.QueryTime { // if two log event have same Query_time, use the later one
 				c.Example.QueryTime = float64(n)
 				c.Example.Size = len(e.Query)
 				if e.Db != "" {
@@ -103,7 +103,7 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 					explainBytes, _ := json.Marshal(e.ExplainRows)
 					c.Example.Explain = string(explainBytes)
 				}
-				if !e.Ts.IsZero() {
+				if !e.Ts.IsZero() && e.Ts.Unix() > 0 {
 					// todo use time.RFC3339Nano instead
 					c.Example.Ts = e.Ts.UTC().Format("2006-01-02 15:04:05")
 				}
@@ -136,10 +136,10 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 		}
 	}
 
-	if !e.Ts.IsZero() && (c.StartAt.IsZero() || e.Ts.Before(c.StartAt)) {
+	if !e.Ts.IsZero() && e.Ts.Unix() > 0 && (c.StartAt.IsZero() || e.Ts.Before(c.StartAt)) {
 		c.StartAt = e.Ts
 	}
-	if !e.Ts.IsZero() && e.Ts.After(c.EndAt) {
+	if !e.Ts.IsZero() && e.Ts.Unix() > 0 && e.Ts.After(c.EndAt) {
 		c.EndAt = e.Ts
 	}
 }
