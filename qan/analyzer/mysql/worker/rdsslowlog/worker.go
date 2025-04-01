@@ -629,6 +629,17 @@ EVENT_LOOP:
 				}
 
 				lastWritten := event.Ts
+
+				if event.Ts.Unix() == 0 ||
+					event.NumberMetrics["Rows_sent"] > uint64(1<<63) ||
+					event.NumberMetrics["Rows_examined"] > uint64(1<<63) ||
+					event.NumberMetrics["Rows_affected"] > uint64(1<<63) ||
+					event.NumberMetrics["Bytes_sent"] > uint64(1<<63) {
+					// invalid log entry, ignore it
+					w.logger.Debug("Parsed an invalid rds slow log entry: ", event)
+					continue
+				}
+
 				if aggregator.ShouldFinalize(event) {
 					// send a result in this case for record purpose
 					sendResult(aggregator)
