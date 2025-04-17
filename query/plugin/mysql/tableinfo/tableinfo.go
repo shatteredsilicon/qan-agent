@@ -69,7 +69,7 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 
 			// try to get the underlying tables or
 			// views of current view
-			s, err := sqlparser.Parse(def)
+			s, err := sqlparser.NewTestParser().Parse(def)
 			if err != nil {
 				continue
 			}
