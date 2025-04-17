@@ -80,7 +80,7 @@ func explain(c mysql.Connector, db, query string, ignoreClassic bool) (*proto.Ex
 
 	// First try failed, see if this is a query that we can
 	// adjust to make EXPLAIN works
-	s, err := sqlparser.Parse(query)
+	s, err := sqlparser.NewTestParser().Parse(query)
 	if err != nil {
 		return nil, originErr
 	}
