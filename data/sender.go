@@ -233,6 +233,7 @@ func (s *Sender) sendAllFiles(startTime time.Time, sent *SentInfo) error {
 		case resp.Code >= 500:
 			// API had problem, try sending files again later.
 			sent.ApiErrs++
+			s.logger.Warn(fmt.Sprintf("Failed to send %s, server error: %s", file, err))
 			return nil // don't warn about API errors
 		case resp.Code >= 400:
 			// File is bad, remove it.
@@ -251,6 +252,8 @@ func (s *Sender) sendAllFiles(startTime time.Time, sent *SentInfo) error {
 			if resp.Code == 299 {
 				s.logger.Warn("Not all data sent because API is throttling. Check the agent status to see the data spool size.")
 				return nil
+			} else if resp.Error != "" {
+				s.logger.Warn(fmt.Sprintf("%s is processed, but server returned an error: %s", file, resp.Error))
 			}
 		default:
 			// This shouldn't happen.
