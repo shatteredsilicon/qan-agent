@@ -11,12 +11,14 @@ require (
 	github.com/go-sql-driver/mysql v1.9.2
 	github.com/gorilla/mux v1.8.1
 	github.com/hashicorp/go-version v1.7.0
+	github.com/lib/pq v1.10.9
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
 	github.com/percona/go-mysql v0.0.0-20210708085315-3e7f9d34c354
 	github.com/percona/percona-toolkit v3.2.1+incompatible
 	github.com/peterbourgon/diskv v2.0.1+incompatible
+	github.com/pganalyze/pg_query_go/v6 v6.1.0
 	github.com/pkg/errors v0.9.1
-	github.com/shatteredsilicon/ssm v0.0.0-20240723193942-a060f195308c
+	github.com/shatteredsilicon/ssm v0.0.0-20250716161023-a4554c8f2a4c
 	github.com/stretchr/testify v1.9.0
 	go.mongodb.org/mongo-driver v1.13.1
 	go4.org v0.0.0-20180417224846-9599cf28b011

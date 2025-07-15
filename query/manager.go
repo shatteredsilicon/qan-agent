@@ -28,6 +28,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/os"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/postgresql"
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
@@ -159,6 +160,7 @@ func (m *Manager) loadPlugins() error {
 
 	m.plugins["mysql"] = mysql.New()
 	m.plugins["mongo"] = mongo.New()
+	m.plugins["postgresql"] = postgresql.New()
 	m.plugins["os"] = os.New()
 	return nil
 }

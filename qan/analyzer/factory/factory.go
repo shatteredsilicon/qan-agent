@@ -30,6 +30,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	mongoAnalyzer "github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo"
 	mysqlAnalyzer "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql"
+	postgresqlAnalyzer "github.com/shatteredsilicon/qan-agent/qan/analyzer/postgresql"
 	"github.com/shatteredsilicon/qan-agent/ticker"
 )
 
@@ -38,7 +39,7 @@ const pkg = "factory"
 type UnknownTypeError string
 
 func (u UnknownTypeError) Error() string {
-	return fmt.Sprintf("%s: unknown type %s", pkg, u)
+	return fmt.Sprintf("%s: unknown type %s", pkg, string(u))
 }
 
 type Factory struct {
@@ -86,6 +87,8 @@ func (f *Factory) Make(analyzerType, analyzerName string, protoInstance proto.In
 		return mongoAnalyzer.New(ctx, protoInstance), nil
 	case "mysql":
 		return mysqlAnalyzer.New(ctx, protoInstance), nil
+	case "postgresql":
+		return postgresqlAnalyzer.New(ctx, protoInstance), nil
 	}
 
 	return nil, UnknownTypeError(analyzerType)
