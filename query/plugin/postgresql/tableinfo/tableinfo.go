@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/util"
 	"github.com/shatteredsilicon/ssm/proto"
-	"vitess.io/vitess/go/vt/sqlparser"
 )
 
 const (
-	MAX_JOIN_DEPTH = 100
+	MAX_EXPR_DEPTH = 100
 	defaultSchema  = "public"
 )
 
@@ -89,20 +89,14 @@ func GetTableInfo(db *sql.DB, tables *proto.TableInfoQuery) (TableInfoResult, er
 				continue
 			}
 
-			// try to get the underlying tables or
-			// views of current view
-			s, err := sqlparser.NewTestParser().Parse(def)
+			pr, err := pg_query.Parse(def)
 			if err != nil {
 				continue
 			}
-
-			switch ss := s.(type) {
-			case sqlparser.SelectStatement:
-				tables := getTablesFromSelectStmt(ss, 0)
-				createList = append(createList, tables...)
-			default:
-				continue
-			}
+			tables := getTablesFromParseResult(pr)
+			createList = append(createList, tables...)
+			indexList = append(indexList, tables...)
+			statusList = append(statusList, tables...)
 		}
 	}
 
@@ -319,98 +313,86 @@ func showStatus(db *sql.DB, schema, table string) (*TableStatus, error) {
 	return &status, nil
 }
 
-func getTablesFromSelectStmt(ss sqlparser.SelectStatement, depth uint) (sTables []proto.Table) {
-	if depth > MAX_JOIN_DEPTH {
+func getTablesFromNode(node *pg_query.Node, depth uint) (sTables []proto.Table) {
+	if depth > MAX_EXPR_DEPTH {
 		return nil
 	}
 	depth++
 
-	switch t := ss.(type) {
-	case *sqlparser.Select:
-		sTables = append(sTables, getTablesFromTableExprs(sqlparser.TableExprs(t.From))...)
-	case *sqlparser.Union:
-		sTables = append(sTables, getTablesFromSelectStmt(t.Left, depth)...)
-		sTables = append(sTables, getTablesFromSelectStmt(t.Right, depth)...)
+	switch s := node.Node.(type) {
+	case *pg_query.Node_SelectStmt:
+		sTables = append(sTables, getTablesFromSelectStmt(s.SelectStmt, depth)...)
+	case *pg_query.Node_TableLikeClause:
+		sTables = append(sTables, proto.Table{Db: s.TableLikeClause.Relation.Schemaname, Table: s.TableLikeClause.Relation.Relname})
+	case *pg_query.Node_FromExpr:
+		for _, fe := range s.FromExpr.Fromlist {
+			sTables = append(sTables, getTablesFromNode(fe, depth)...)
+		}
+	case *pg_query.Node_FuncCall:
+		for _, arg := range s.FuncCall.Args {
+			sTables = append(sTables, getTablesFromNode(arg, depth)...)
+		}
+	case *pg_query.Node_FuncExpr:
+		for _, arg := range s.FuncExpr.Args {
+			sTables = append(sTables, getTablesFromNode(arg, depth)...)
+		}
+	case *pg_query.Node_ResTarget:
+		for _, i := range s.ResTarget.Indirection {
+			sTables = append(sTables, getTablesFromNode(i, depth)...)
+		}
+		if s.ResTarget.Val != nil {
+			sTables = append(sTables, getTablesFromNode(s.ResTarget.Val, depth)...)
+		}
+	case *pg_query.Node_JoinExpr:
+		if s.JoinExpr.Larg != nil {
+			sTables = append(sTables, getTablesFromNode(s.JoinExpr.Larg, depth)...)
+		}
+		if s.JoinExpr.Rarg != nil {
+			sTables = append(sTables, getTablesFromNode(s.JoinExpr.Rarg, depth)...)
+		}
+	case *pg_query.Node_RangeVar:
+		sTables = append(sTables, proto.Table{Db: s.RangeVar.Schemaname, Table: s.RangeVar.Relname})
+	case *pg_query.Node_AExpr:
+		if s.AExpr.Lexpr != nil {
+			sTables = append(sTables, getTablesFromNode(s.AExpr.Lexpr, depth)...)
+		}
+		if s.AExpr.Rexpr != nil {
+			sTables = append(sTables, getTablesFromNode(s.AExpr.Rexpr, depth)...)
+		}
+	case *pg_query.Node_SubLink:
+		if s.SubLink.Subselect != nil {
+			sTables = append(sTables, getTablesFromNode(s.SubLink.Subselect, depth)...)
+		}
 	}
 
 	return sTables
 }
 
-func getTablesFromTableExprs(tes sqlparser.TableExprs) (tables []proto.Table) {
-	for _, te := range tes {
-		tables = append(tables, getTablesFromTableExpr(te, 0)...)
+func getTablesFromSelectStmt(stmt *pg_query.SelectStmt, depth uint) (sTables []proto.Table) {
+	for _, t := range stmt.TargetList {
+		sTables = append(sTables, getTablesFromNode(t, depth)...)
 	}
-	return tables
+	for _, f := range stmt.FromClause {
+		sTables = append(sTables, getTablesFromNode(f, depth)...)
+	}
+	return
 }
 
-func getTablesFromTableExpr(te sqlparser.TableExpr, depth uint) (tables []proto.Table) {
-	if depth > MAX_JOIN_DEPTH {
-		return nil
+func getTablesFromParseResult(pr *pg_query.ParseResult) []proto.Table {
+	var tables []proto.Table
+	for _, s := range pr.Stmts {
+		tables = append(tables, getTablesFromNode(s.Stmt, 0)...)
 	}
-
-	depth++
-	switch a := te.(type) {
-	case *sqlparser.AliasedTableExpr:
-		switch a.Expr.(type) {
-		case sqlparser.TableName:
-			t := a.Expr.(sqlparser.TableName)
-			db := t.Qualifier.String()
-			tbl := parseTableName(t.Name.String())
-			if db != "" || tbl != "" {
-				table := proto.Table{
-					Db:    db,
-					Table: tbl,
-				}
-				tables = append(tables, table)
-			}
-		case *sqlparser.DerivedTable:
-			tables = append(tables, getTablesFromSelectStmt(a.Expr.(*sqlparser.DerivedTable).Select, depth)...)
+	newTables := make([]proto.Table, 0)
+	tableMap := make(map[string]struct{})
+	for _, t := range tables {
+		key := t.Db + "." + t.Table
+		if _, ok := tableMap[key]; !ok {
+			tableMap[key] = struct{}{}
+			newTables = append(newTables, t)
 		}
-
-	case *sqlparser.JoinTableExpr:
-		// This case happens for JOIN clauses. It recurses to the bottom
-		// of the tree via the left expressions, then it unwinds. E.g. with
-		// "a JOIN b JOIN c" the tree is:
-		//
-		//  Left			Right
-		//  a     b      c	AliasedTableExpr (case above)
-		//  |     |      |
-		//  +--+--+      |
-		//     |         |
-		//    t2----+----+	JoinTableExpr
-		//          |
-		//        var t (t @ depth=1) JoinTableExpr
-		//
-		// Code will go left twice to arrive at "a". Then it will unwind and
-		// store the right-side values: "b" then "c". Because of this, if
-		// MAX_JOIN_DEPTH is reached, we lose the whole tree because if we take
-		// the existing right-side tables, we'll generate a misleading partial
-		// list of tables, e.g. "SELECT b c".
-		tables = append(tables, getTablesFromTableExpr(a.LeftExpr, depth)...)
-		tables = append(tables, getTablesFromTableExpr(a.RightExpr, depth)...)
-
-	case *sqlparser.ParenTableExpr:
-		tables = append(tables, getTablesFromTableExprs(a.Exprs)...)
 	}
-
-	return tables
-}
-
-func parseTableName(tableName string) string {
-	// https://dev.mysql.com/doc/refman/5.7/en/select.html#idm140358784149168
-	// You are permitted to specify DUAL as a dummy table name in situations where no tables are referenced:
-	//
-	// ```
-	// mysql> SELECT 1 + 1 FROM DUAL;
-	//         -> 2
-	// ```
-	// DUAL is purely for the convenience of people who require that all SELECT statements
-	// should have FROM and possibly other clauses. MySQL may ignore the clauses.
-	// MySQL does not require FROM DUAL if no tables are referenced.
-	if tableName == "dual" {
-		tableName = ""
-	}
-	return tableName
+	return newTables
 }
 
 func getDefaultSchema(table string) string {

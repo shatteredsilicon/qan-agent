@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/data"
@@ -165,16 +166,28 @@ func (c *TableCollector) Start(ctx context.Context) {
 				totalRow.MaxExecTime = row.MaxExecTime
 			}
 			totalRow.MeanExecTime += row.MeanExecTime
-			for _, queryID := range row.QueryIDs {
-				if ex, ok := c.examples[queryID]; ok {
-					if example == nil || float64(ex.QueryStart.Unix()) > example.QueryTime {
-						example = &qan.Example{
-							Db:        row.Datname,
-							QueryTime: float64(ex.QueryStart.Unix()),
-							Query:     ex.Query,
-						}
+			if strings.HasPrefix(strings.TrimSpace(strings.ToLower(row.Query)), "explain ") {
+				// for EXPLAIN query, use the query in pg_stat_statements,
+				// because the query_id is a reference to the origin query
+				if example == nil {
+					example = &qan.Example{
+						Db:        row.Datname,
+						QueryTime: float64(time.Now().Unix()),
+						Query:     row.Query,
 					}
-					break
+				}
+			} else {
+				for _, queryID := range row.QueryIDs {
+					if ex, ok := c.examples[queryID]; ok {
+						if example == nil || float64(ex.QueryStart.Unix()) > example.QueryTime {
+							example = &qan.Example{
+								Db:        row.Datname,
+								QueryTime: float64(ex.QueryStart.Unix()),
+								Query:     ex.Query,
+							}
+						}
+						break
+					}
 				}
 			}
 			count += 1
