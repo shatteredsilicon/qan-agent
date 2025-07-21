@@ -95,8 +95,6 @@ func (p *CSVLogParser) parseLine(fields []string) (*LogEntry, error) {
 	e.Location = fields[21]
 	e.ApplicationName = fields[22]
 	e.BackendType = fields[23]
-	e.LeaderPID, _ = strconv.Atoi(fields[24])
-	e.QueryID, _ = strconv.ParseInt(fields[25], 10, 64)
 
 	return &e, nil
 }
