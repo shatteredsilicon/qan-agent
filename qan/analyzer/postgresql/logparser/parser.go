@@ -77,8 +77,6 @@ type LogEntry struct {
 	Location             string  `json:"location"`
 	ApplicationName      string  `json:"application_name"`
 	BackendType          string  `json:"backend_type"`
-	LeaderPID            int     `json:"leader_pid"`
-	QueryID              int64   `json:"query_id"`
 }
 
 type Event struct {
