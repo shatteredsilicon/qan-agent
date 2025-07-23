@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
 )
 
@@ -43,7 +44,10 @@ func (p *CSVLogParser) Parse(ctx context.Context, f *os.File, c chan<- Event) er
 		}
 
 		q := match[0][2]
-		fingerprint := query.Fingerprint(q)
+		fingerprint, err := pg_query.Normalize(q)
+		if err != nil {
+			return err
+		}
 		id := query.Id(fingerprint)
 		queryTime, _ := strconv.ParseFloat(match[0][1], 64)
 
