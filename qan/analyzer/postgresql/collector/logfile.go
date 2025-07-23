@@ -76,8 +76,8 @@ func NewLogFileCollector(config config.QAN, logger *pct.Logger, db *sql.DB, spoo
 	}
 }
 
-func (c *LogFileCollector) Prepare() {}
-func (c *LogFileCollector) Stop()    {}
+func (c *LogFileCollector) Prepare() error { return nil }
+func (c *LogFileCollector) Stop()          {}
 
 func (c *LogFileCollector) Start(ctx context.Context) {
 	var loggingEnable nullBool

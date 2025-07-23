@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
@@ -42,61 +43,113 @@ type statement struct {
 }
 
 type TableCollector struct {
-	config        config.QAN
-	logger        *pct.Logger
-	db            *sql.DB
-	spooler       data.Spooler
-	statements    map[string]statement // keyed on classId
-	examples      map[int64]exampleRow
-	exampleTicker *time.Ticker
+	config         config.QAN
+	logger         *pct.Logger
+	db             *sql.DB
+	spooler        data.Spooler
+	statements     map[string]statement // keyed on classId
+	examples       map[int64]*exampleRow
+	examplesByHash map[string]*exampleRow
+	exampleTicker  *time.Ticker
 }
 
 func NewTableCollector(config config.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler) *TableCollector {
 	return &TableCollector{
-		config:        config,
-		db:            db,
-		logger:        logger,
-		spooler:       spooler,
-		statements:    make(map[string]statement),
-		examples:      make(map[int64]exampleRow),
-		exampleTicker: time.NewTicker(time.Millisecond * 1000),
+		config:         config,
+		db:             db,
+		logger:         logger,
+		spooler:        spooler,
+		statements:     make(map[string]statement),
+		examples:       make(map[int64]*exampleRow),
+		examplesByHash: make(map[string]*exampleRow),
+		exampleTicker:  time.NewTicker(time.Millisecond * 1000),
 	}
 }
 
-func (c *TableCollector) Prepare() {
+func (c *TableCollector) Prepare() error {
+	var queryIDEnabled bool
+	if err := c.db.QueryRow("SELECT 1 FROM information_schema.columns WHERE table_schema = 'pg_catalog' AND table_name = 'pg_stat_activity' AND column_name = 'query_id'").Scan(&queryIDEnabled); err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
 	go func() {
+		columns := "query, query_start"
+		if queryIDEnabled {
+			columns = "query_id, query, query_start"
+		}
 		for range c.exampleTicker.C {
 			rows, err := c.db.Query(`
-				SELECT query_id, query, query_start
+				SELECT ` + columns + `
 				FROM pg_stat_activity
 			`)
 			if err != nil {
-				c.logger.Error(err)
+				c.logger.Error("failed to retrieve query examples from pg_stat_activity: ", err)
 				continue
 			}
-			defer rows.Close()
 
 			for rows.Next() {
 				var id sql.NullInt64
-				var query string
+				var q string
 				var ts sql.NullTime
-				if err = rows.Scan(&id, &query, &ts); err != nil {
-					c.logger.Error(err)
+				if queryIDEnabled {
+					err = rows.Scan(&id, &q, &ts)
+				} else {
+					err = rows.Scan(&q, &ts)
+				}
+				if err != nil {
+					c.logger.Error("failed to scan query examples from pg_stat_activity:", err)
 					break
 				}
-				if id.Valid && ts.Valid {
-					c.examples[id.Int64] = exampleRow{
-						Query:      query,
-						QueryStart: ts.Time,
-					}
+
+				eRow := exampleRow{
+					Query:      q,
+					QueryStart: ts.Time,
 				}
+				if queryIDEnabled {
+					if id.Valid {
+						c.examples[id.Int64] = &eRow
+					}
+				} else {
+					fingerprint, err := pg_query.Normalize(q)
+					if err != nil {
+						c.logger.Error("failed to normalize query examples:", err, ", query:", q)
+						continue
+					}
+					queryID, err := pg_query.Fingerprint(strings.TrimSpace(fingerprint))
+					if err != nil {
+						c.logger.Error("failed to fingerprint query examples:", err, ", query:", q)
+						continue
+					}
+					c.examplesByHash[queryID] = &eRow
+				}
+			}
+
+			if err = rows.Close(); err != nil {
+				c.logger.Error("failed to close rows after retrieve query examples examples:", err)
 			}
 		}
 	}()
+
+	return nil
 }
 
 func (c *TableCollector) Stop() {
 	c.exampleTicker.Stop()
+}
+
+func (c *TableCollector) getExampleRow(queryIDs []int64, fingerprint string) *exampleRow {
+	if len(c.examples) > 0 {
+		for _, queryID := range queryIDs {
+			example := c.examples[queryID]
+			if example != nil {
+				return example
+			}
+		}
+	} else {
+		queryID, _ := pg_query.Fingerprint(strings.TrimSpace(fingerprint))
+		return c.examplesByHash[queryID]
+	}
+	return nil
 }
 
 func (c *TableCollector) Start(ctx context.Context) {
@@ -104,7 +157,7 @@ func (c *TableCollector) Start(ctx context.Context) {
 
 	var statStatementEnable bool
 	if err := c.db.QueryRowContext(ctx, "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_stat_statements' and installed_version is not null").Scan(&statStatementEnable); err != nil && err != sql.ErrNoRows {
-		c.logger.Error(err)
+		c.logger.Error("failed to check if pg_stat_statements is enabled:", err)
 		return
 	}
 
@@ -115,7 +168,7 @@ func (c *TableCollector) Start(ctx context.Context) {
 
 	statments, err := c.getStatements()
 	if err != nil {
-		c.logger.Error(err)
+		c.logger.Error("failed to get statements from pg_stat_statements:", err)
 		return
 	}
 
@@ -177,16 +230,12 @@ func (c *TableCollector) Start(ctx context.Context) {
 					}
 				}
 			} else {
-				for _, queryID := range row.QueryIDs {
-					if ex, ok := c.examples[queryID]; ok {
-						if example == nil || float64(ex.QueryStart.Unix()) > example.QueryTime {
-							example = &qan.Example{
-								Db:        row.Datname,
-								QueryTime: float64(ex.QueryStart.Unix()),
-								Query:     ex.Query,
-							}
-						}
-						break
+				ex := c.getExampleRow(row.QueryIDs, row.Query)
+				if ex != nil && (example == nil || float64(ex.QueryStart.Unix()) > example.QueryTime) {
+					example = &qan.Example{
+						Db:        row.Datname,
+						QueryTime: float64(ex.QueryStart.Unix()),
+						Query:     ex.Query,
 					}
 				}
 			}
@@ -261,7 +310,7 @@ func (c *TableCollector) getStatements() (map[string]statement, error) {
 	statments := make(map[string]statement)
 	for rows.Next() {
 		var row statmentRow
-		var queryID int64
+		var queryID sql.NullInt64
 		err = rows.Scan(
 			&queryID,
 			&row.Datname,
@@ -280,8 +329,11 @@ func (c *TableCollector) getStatements() (map[string]statement, error) {
 		if err != nil {
 			return nil, err
 		}
-		row.QueryIDs = []int64{queryID}
+		if !queryID.Valid {
+			continue
+		}
 
+		row.QueryIDs = []int64{queryID.Int64}
 		id := query.Id(row.Query)
 		if s, exist := statments[id]; exist {
 			if oldRow, ok := s.rows[row.Datname]; ok {

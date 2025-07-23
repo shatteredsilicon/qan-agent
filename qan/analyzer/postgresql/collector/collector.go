@@ -3,7 +3,7 @@ package collector
 import "context"
 
 type Collector interface {
-	Prepare()
+	Prepare() error
 	Start(context.Context)
 	Stop()
 }
