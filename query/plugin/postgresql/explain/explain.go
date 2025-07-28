@@ -10,7 +10,15 @@ import (
 	"vitess.io/vitess/go/vt/sqlparser"
 )
 
+var (
+	unsupportedRegex = regexp.MustCompile(`^(?i)\s*(CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|VACUUM|ANALYZE|EXPLAIN)`)
+)
+
 func Explain(db *sql.DB, query string, convert, ignoreClassic bool) (*proto.ExplainResult, error) {
+	if unsupportedRegex.Match([]byte(query)) {
+		return nil, nil
+	}
+
 	explainResult, err := explain(db, query, ignoreClassic)
 	if err != nil {
 		return nil, err
