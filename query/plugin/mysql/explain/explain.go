@@ -29,7 +29,15 @@ import (
 	"vitess.io/vitess/go/vt/sqlparser"
 )
 
+var (
+	unsupportedRegex = regexp.MustCompile(`^(?i)\s*(CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|OPTIMIZE|ANALYZE|EXPLAIN)`)
+)
+
 func Explain(c mysql.Connector, db, query string, convert, ignoreClassic bool) (*proto.ExplainResult, error) {
+	if unsupportedRegex.Match([]byte(query)) {
+		return nil, nil
+	}
+
 	if db != "" && !strings.HasPrefix(db, "`") {
 		db = "`" + db + "`"
 	}
