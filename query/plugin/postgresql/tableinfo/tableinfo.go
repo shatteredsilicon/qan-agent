@@ -164,16 +164,17 @@ func GetTableInfo(db *sql.DB, tables *proto.TableInfoQuery) (TableInfoResult, er
 }
 
 func showCreate(db *sql.DB, catalog, schema, table string) (proto.DBObjectType, string, error) {
-	var def, viewDef string
+	var def string
+	var viewDef sql.NullString
 	var tableType proto.DBObjectType
 
 	if err := db.QueryRow(`
 		SELECT view_definition
 		FROM information_schema.views
 		WHERE table_catalog = $1 AND table_schema = $2 AND table_name = $3
-	`, catalog, schema, table).Scan(&viewDef); err == nil {
-		return proto.TypeDBView, viewDef, nil
-	} else if err != sql.ErrNoRows {
+	`, catalog, schema, table).Scan(&viewDef); err == nil && viewDef.Valid {
+		return proto.TypeDBView, viewDef.String, nil
+	} else if err != nil && err != sql.ErrNoRows {
 		return tableType, "", err
 	}
 

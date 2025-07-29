@@ -112,7 +112,10 @@ func (c *TableCollector) Prepare() error {
 				} else {
 					fingerprint, err := pg_query.Normalize(q)
 					if err != nil {
-						c.logger.Error("failed to normalize query examples:", err, ", query:", q)
+						if !strings.HasPrefix(strings.TrimSpace(err.Error()), "syntax error") {
+							// ignore syntax error
+							c.logger.Error("failed to normalize query examples:", err, ", query:", q)
+						}
 						continue
 					}
 					queryID, err := pg_query.Fingerprint(strings.TrimSpace(fingerprint))

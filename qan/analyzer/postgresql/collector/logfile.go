@@ -81,8 +81,8 @@ func (c *LogFileCollector) Stop()          {}
 
 func (c *LogFileCollector) Start(ctx context.Context) {
 	var loggingEnable nullBool
-	var logDestination, currentLogfile, dataDir, logFilename, logDir string
-	if err := c.db.QueryRowContext(ctx, "SELECT current_setting('logging_collector'),  current_setting('log_destination'), pg_current_logfile(), current_setting('data_directory'), current_setting('log_filename'), current_setting('log_directory')").Scan(&loggingEnable, &logDestination, &currentLogfile, &dataDir, &logFilename, &logDir); err != nil {
+	var logDestination, dataDir, logFilename, logDir string
+	if err := c.db.QueryRowContext(ctx, "SELECT current_setting('logging_collector'),  current_setting('log_destination'), current_setting('data_directory'), current_setting('log_filename'), current_setting('log_directory')").Scan(&loggingEnable, &logDestination, &dataDir, &logFilename, &logDir); err != nil {
 		c.logger.Error(err)
 		return
 	}
@@ -102,10 +102,6 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 	logRoutineChan := make(chan struct{}, parseRoutines)
 	logEventChan := make(chan logparser.Event, parseRoutines)
 	var wg sync.WaitGroup
-
-	if !path.IsAbs(currentLogfile) {
-		currentLogfile = path.Join(dataDir, currentLogfile)
-	}
 
 	if !path.IsAbs(logDir) {
 		logDir = path.Join(dataDir, logDir)
