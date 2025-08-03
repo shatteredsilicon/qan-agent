@@ -270,16 +270,13 @@ func (self *Aggregator) createResult() *report.Result {
 			}
 		}
 
-		metrics := event.NewMetrics()
-
-		metrics.TimeMetrics["Query_time"] = newEventTimeStatsInMilliseconds(queryInfo.QueryTime)
+		class.Metrics.TimeMetrics["Query_time"] = newEventTimeStatsInMilliseconds(queryInfo.QueryTime)
 
 		// @todo we map below metrics to MySQL equivalents according to PMM-830
-		metrics.NumberMetrics["Bytes_sent"] = newEventNumberStats(queryInfo.ResponseLength)
-		metrics.NumberMetrics["Rows_sent"] = newEventNumberStats(queryInfo.Returned)
-		metrics.NumberMetrics["Rows_examined"] = newEventNumberStats(queryInfo.Scanned)
+		class.Metrics.NumberMetrics["Bytes_sent"] = newEventNumberStats(queryInfo.ResponseLength)
+		class.Metrics.NumberMetrics["Rows_sent"] = newEventNumberStats(queryInfo.Returned)
+		class.Metrics.NumberMetrics["Rows_examined"] = newEventNumberStats(queryInfo.Scanned)
 
-		class.Metrics = metrics
 		class.TotalQueries = uint(queryInfo.Count)
 		class.UniqueQueries = 1
 		classes = append(classes, class)
