@@ -27,7 +27,7 @@ func NewJSONLogParser() LogParser {
 	return &JSONLogParser{}
 }
 
-func (p *JSONLogParser) Parse(ctx context.Context, f *os.File, c chan<- Event) error {
+func (p *JSONLogParser) Parse(ctx context.Context, f *os.File, c chan<- *Event) error {
 	reader := bufio.NewScanner(f)
 	for reader.Scan() {
 		var e JSONLogEntry
@@ -40,7 +40,10 @@ func (p *JSONLogParser) Parse(ctx context.Context, f *os.File, c chan<- Event) e
 			continue
 		}
 
-		q := match[0][2]
+		q := match[0][3]
+		if len(match[0][4]) > 0 {
+			q = match[0][4]
+		}
 		fingerprint, err := pg_query.Normalize(q)
 		if err != nil {
 			return err
@@ -56,7 +59,7 @@ func (p *JSONLogParser) Parse(ctx context.Context, f *os.File, c chan<- Event) e
 			}
 		}
 
-		c <- Event{
+		c <- &Event{
 			ID:          id,
 			Fingerprint: fingerprint,
 			Query:       q,

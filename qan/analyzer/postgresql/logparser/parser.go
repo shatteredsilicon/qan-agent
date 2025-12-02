@@ -2,10 +2,17 @@ package logparser
 
 import (
 	"context"
+	"encoding/json"
+	"math"
 	"os"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	pg_query "github.com/pganalyze/pg_query_go/v6"
+	"github.com/shatteredsilicon/qan-agent/util"
 )
 
 const (
@@ -13,11 +20,12 @@ const (
 )
 
 var (
-	statementRe = regexp.MustCompile(`(?s)^\s*duration:\s*([0-9\.]+)\s*ms\s+statement:\s*(.*)`)
+	statementRe = regexp.MustCompile(`(?s)^\s*duration:\s*([0-9\.]+)\s*ms\s+(statement:\s*(.*)|execute\s+[^:]+:\s*(.*))`)
+	parameterRe = regexp.MustCompile(`(?si)^\s*parameters:\s*(\$\d+\s*=.*)`)
 )
 
 type LogParser interface {
-	Parse(context.Context, *os.File, chan<- Event) error
+	Parse(context.Context, *os.File, chan<- *Event) error
 	IsFileAcceptable(os.DirEntry) bool
 }
 
@@ -87,4 +95,95 @@ type Event struct {
 	TimeMetrics   map[string]float64 // *_time and *_wait metrics
 	NumberMetrics map[string]uint64  // most metrics
 	BoolMetrics   map[string]bool    // yes/no metrics
+}
+
+type paramRef struct {
+	number   int
+	location int
+}
+
+type paramRefArr []paramRef
+
+func (arr paramRefArr) Len() int           { return len(arr) }
+func (arr paramRefArr) Swap(i, j int)      { arr[i], arr[j] = arr[j], arr[i] }
+func (arr paramRefArr) Less(i, j int) bool { return arr[i].location > arr[j].location }
+
+func (e *Event) AttemptToResolveParams() {
+	match := parameterRe.FindAllStringSubmatch(e.LogEntry.Detail, -1)
+	if len(match) == 0 {
+		return
+	}
+
+	params := map[int]string{}
+	for _, item := range util.Split(match[0][1], ',') {
+		kv := strings.SplitN(item, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(kv[0])
+		if len(key) < 2 || key[0] != '$' {
+			continue
+		}
+
+		number, err := strconv.Atoi(key[1:])
+		if err != nil {
+			continue
+		}
+		params[number] = strings.TrimSpace(kv[1])
+	}
+
+	if len(params) == 0 {
+		return
+	}
+
+	parseTreeJSON, err := pg_query.ParseToJSON(e.Query)
+	if err != nil {
+		return
+	}
+
+	parseTree := map[string]interface{}{}
+	if err = json.Unmarshal([]byte(parseTreeJSON), &parseTree); err != nil {
+		return
+	}
+
+	paramObjects := util.GetJSONObjectsByKey(parseTree, "ParamRef")
+
+	var paramRefs paramRefArr
+	for _, obj := range paramObjects {
+		param, ok := obj.(map[string]interface{})
+		if !ok || param == nil {
+			continue
+		}
+
+		var ref paramRef
+
+		number, ok := param["number"].(float64)
+		if !ok {
+			continue
+		}
+		ref.number = int(number)
+
+		if _, ok := params[ref.number]; !ok {
+			continue
+		}
+
+		location, ok := param["location"].(float64)
+		if !ok {
+			continue
+		}
+		ref.location = int(location)
+
+		if len(e.Query) < ref.location {
+			continue
+		}
+
+		paramRefs = append(paramRefs, ref)
+	}
+
+	sort.Sort(paramRefs)
+	for _, ref := range paramRefs {
+		numberLen := 1 + int(math.Log10(float64(ref.number)))
+		e.Query = e.Query[:ref.location] + params[ref.number] + e.Query[ref.location+1+numberLen:]
+	}
 }

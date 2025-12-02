@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
-	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/util"
+	"github.com/shatteredsilicon/qan-agent/util"
 	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

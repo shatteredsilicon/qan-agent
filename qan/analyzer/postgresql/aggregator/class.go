@@ -38,7 +38,7 @@ func NewClass(id, fingerprint string, sample bool) *Class {
 }
 
 // AddEvent adds an event to the query class.
-func (c *Class) AddEvent(e logparser.Event) {
+func (c *Class) AddEvent(e *logparser.Event) {
 	c.TotalQueries++
 	c.Metrics.AddEvent(e)
 
