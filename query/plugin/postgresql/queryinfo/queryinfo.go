@@ -6,11 +6,8 @@ import (
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/postgresql/tableinfo"
+	"github.com/shatteredsilicon/qan-agent/util"
 	"github.com/shatteredsilicon/ssm/proto"
-)
-
-const (
-	MAX_OBJ_DEPTH = 100
 )
 
 // QueryInfo represents a TABLE/PROCEDURE/VIEW
@@ -77,32 +74,5 @@ func shouldSkipExplain(query string) bool {
 		return false
 	}
 
-	return isJSONKeyExists(parseTree, "ParamRef", 0)
-}
-
-func isJSONKeyExists(data interface{}, key string, depth int) bool {
-	if depth >= MAX_OBJ_DEPTH {
-		return false
-	}
-	depth++
-
-	switch obj := data.(type) {
-	case map[string]interface{}:
-		for k, v := range obj {
-			if k == key {
-				return true
-			}
-			if exists := isJSONKeyExists(v, key, depth); exists {
-				return true
-			}
-		}
-	case []interface{}:
-		for _, v := range obj {
-			if exists := isJSONKeyExists(v, key, depth); exists {
-				return true
-			}
-		}
-	}
-
-	return false
+	return util.IsJSONKeyExists(parseTree, "ParamRef", 0)
 }

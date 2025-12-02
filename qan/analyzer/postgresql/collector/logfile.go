@@ -100,7 +100,7 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 
 	logParser := logParserFunc()
 	logRoutineChan := make(chan struct{}, parseRoutines)
-	logEventChan := make(chan logparser.Event, parseRoutines)
+	logEventChan := make(chan *logparser.Event, parseRoutines)
 	var wg sync.WaitGroup
 
 	if !path.IsAbs(logDir) {
@@ -123,6 +123,7 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 				if q := strings.TrimSpace(e.Query); q == "" || q == ";" {
 					continue
 				}
+				e.AttemptToResolveParams()
 				if ag.ShouldFinalize(e) {
 					report := ag.Finalize(c.config, startTime, time.Now())
 					ag = aggregator.NewAggregator(true)
@@ -130,7 +131,6 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 					if err := c.spooler.Write("qan", report); err != nil {
 						c.logger.Warn("Lost report: ", err)
 					}
-					continue
 				}
 				ag.AddEvent(e)
 			case <-stopC:
@@ -209,7 +209,7 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 
 		logRoutineChan <- struct{}{}
 		wg.Add(1)
-		go func(ctx context.Context, f *os.File, fi os.FileInfo, p logparser.LogParser, ch chan logparser.Event) {
+		go func(ctx context.Context, f *os.File, fi os.FileInfo, p logparser.LogParser, ch chan *logparser.Event) {
 			defer func() {
 				<-logRoutineChan
 				wg.Done()
