@@ -5,12 +5,11 @@ import (
 	"testing"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
-	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type example struct {
 	query  string
-	tables []proto.Table
+	tables []TableParam
 }
 
 var examples = []example{
@@ -21,7 +20,7 @@ var examples = []example{
 					query_start
 			FROM pg_stat_activity
 		`,
-		tables: []proto.Table{
+		tables: []TableParam{
 			{Db: "", Table: "pg_stat_activity"},
 		},
 	},
@@ -44,7 +43,7 @@ var examples = []example{
 			JOIN pg_database
 				ON pg_stat_statements.dbid = pg_database.oid
 		`,
-		tables: []proto.Table{
+		tables: []TableParam{
 			{Db: "", Table: "pg_stat_statements"},
 			{Db: "", Table: "pg_database"},
 		},
@@ -73,7 +72,7 @@ var examples = []example{
 				ON ((fc.category_id = c.category_id)))
 			GROUP BY  a.actor_id, a.first_name, a.last_name
 		`,
-		tables: []proto.Table{
+		tables: []TableParam{
 			{Db: "", Table: "film"},
 			{Db: "", Table: "film_category"},
 			{Db: "", Table: "film_actor"},

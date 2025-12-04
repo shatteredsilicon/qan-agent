@@ -12,7 +12,6 @@ import (
 
 const (
 	MAX_EXPR_DEPTH = 100
-	defaultSchema  = "public"
 )
 
 type IndexStatus struct {
@@ -41,34 +40,49 @@ type TableStatus struct {
 }
 
 type TableInfo struct {
-	Type   proto.DBObjectType      `json:",omitempty"`
-	Create string                  `json:",omitempty"`
-	Index  map[string]*IndexStatus `json:",omitempty"`
-	Status *TableStatus            `json:",omitempty"`
-	Errors []string                `json:",omitempty"`
+	Type        proto.DBObjectType      `json:",omitempty"`
+	Create      string                  `json:",omitempty"`
+	Index       map[string]*IndexStatus `json:",omitempty"`
+	Status      *TableStatus            `json:",omitempty"`
+	Errors      []string                `json:",omitempty"`
+	GuessSchema *proto.GuessDB          `json:"-"`
+}
+
+type TableParam struct {
+	Db          string
+	Table       string
+	GuessSchema *proto.GuessDB `json:"-"`
+}
+
+type TableInfoQuery struct {
+	UUID   string
+	DB     string       // GLOBAL database
+	Create []TableParam // SHOW CREATE TABLE Db.Table
+	Index  []TableParam // SHOW INDEXES FROM Db.Table
+	Status []TableParam // SHOW TABLE STATUS FROM Db LIKE 'Table'
 }
 
 type TableInfoResult map[string]*TableInfo
 
-func GetTableInfo(db *sql.DB, tables *proto.TableInfoQuery) (TableInfoResult, error) {
+func GetTableInfo(db *sql.DB, tables *TableInfoQuery) (TableInfoResult, error) {
 	res := make(TableInfoResult)
 
-	createList := append([]proto.Table{}, tables.Create...)
-	indexList := append([]proto.Table{}, tables.Index...)
-	statusList := append([]proto.Table{}, tables.Status...)
+	createList := append([]TableParam{}, tables.Create...)
+	indexList := append([]TableParam{}, tables.Index...)
+	statusList := append([]TableParam{}, tables.Status...)
 
 	if len(tables.Create) > 0 {
 		for i := 0; i < len(createList); i++ {
 			t := createList[i]
 
-			if t.Db == "" {
-				t.Db = getDefaultSchema(t.Table)
+			dbTable := t.Table
+			if len(t.Db) > 0 {
+				dbTable = t.Db + "." + t.Table
 			}
 
-			dbTable := t.Db + "." + t.Table
 			tableInfo, ok := res[dbTable]
 			if !ok {
-				res[dbTable] = &TableInfo{}
+				res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
 				tableInfo = res[dbTable]
 			}
 
@@ -102,14 +116,14 @@ func GetTableInfo(db *sql.DB, tables *proto.TableInfoQuery) (TableInfoResult, er
 
 	if len(tables.Index) > 0 {
 		for _, t := range indexList {
-			if t.Db == "" {
-				t.Db = getDefaultSchema(t.Table)
+			dbTable := t.Table
+			if len(t.Db) > 0 {
+				dbTable = t.Db + "." + t.Table
 			}
 
-			dbTable := t.Db + "." + t.Table
 			tableInfo, ok := res[dbTable]
 			if !ok {
-				res[dbTable] = &TableInfo{}
+				res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
 				tableInfo = res[dbTable]
 			}
 			if tableInfo.Type == proto.TypeDBView {
@@ -132,14 +146,14 @@ func GetTableInfo(db *sql.DB, tables *proto.TableInfoQuery) (TableInfoResult, er
 
 	if len(tables.Status) > 0 {
 		for _, t := range statusList {
-			if t.Db == "" {
-				t.Db = getDefaultSchema(t.Table)
+			dbTable := t.Table
+			if len(t.Db) > 0 {
+				dbTable = t.Db + "." + t.Table
 			}
 
-			dbTable := t.Db + "." + t.Table
 			tableInfo, ok := res[dbTable]
 			if !ok {
-				res[dbTable] = &TableInfo{}
+				res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
 				tableInfo = res[dbTable]
 			}
 			if tableInfo.Type == proto.TypeDBView {
@@ -314,7 +328,7 @@ func showStatus(db *sql.DB, schema, table string) (*TableStatus, error) {
 	return &status, nil
 }
 
-func getTablesFromNode(node *pg_query.Node, depth uint) (sTables []proto.Table) {
+func getTablesFromNode(node *pg_query.Node, depth uint) (sTables []TableParam) {
 	if depth > MAX_EXPR_DEPTH {
 		return nil
 	}
@@ -324,7 +338,7 @@ func getTablesFromNode(node *pg_query.Node, depth uint) (sTables []proto.Table) 
 	case *pg_query.Node_SelectStmt:
 		sTables = append(sTables, getTablesFromSelectStmt(s.SelectStmt, depth)...)
 	case *pg_query.Node_TableLikeClause:
-		sTables = append(sTables, proto.Table{Db: s.TableLikeClause.Relation.Schemaname, Table: s.TableLikeClause.Relation.Relname})
+		sTables = append(sTables, TableParam{Db: s.TableLikeClause.Relation.Schemaname, Table: s.TableLikeClause.Relation.Relname})
 	case *pg_query.Node_FromExpr:
 		for _, fe := range s.FromExpr.Fromlist {
 			sTables = append(sTables, getTablesFromNode(fe, depth)...)
@@ -352,7 +366,7 @@ func getTablesFromNode(node *pg_query.Node, depth uint) (sTables []proto.Table) 
 			sTables = append(sTables, getTablesFromNode(s.JoinExpr.Rarg, depth)...)
 		}
 	case *pg_query.Node_RangeVar:
-		sTables = append(sTables, proto.Table{Db: s.RangeVar.Schemaname, Table: s.RangeVar.Relname})
+		sTables = append(sTables, TableParam{Db: s.RangeVar.Schemaname, Table: s.RangeVar.Relname})
 	case *pg_query.Node_AExpr:
 		if s.AExpr.Lexpr != nil {
 			sTables = append(sTables, getTablesFromNode(s.AExpr.Lexpr, depth)...)
@@ -369,7 +383,7 @@ func getTablesFromNode(node *pg_query.Node, depth uint) (sTables []proto.Table) 
 	return sTables
 }
 
-func getTablesFromSelectStmt(stmt *pg_query.SelectStmt, depth uint) (sTables []proto.Table) {
+func getTablesFromSelectStmt(stmt *pg_query.SelectStmt, depth uint) (sTables []TableParam) {
 	for _, t := range stmt.TargetList {
 		sTables = append(sTables, getTablesFromNode(t, depth)...)
 	}
@@ -379,12 +393,12 @@ func getTablesFromSelectStmt(stmt *pg_query.SelectStmt, depth uint) (sTables []p
 	return
 }
 
-func getTablesFromParseResult(pr *pg_query.ParseResult) []proto.Table {
-	var tables []proto.Table
+func getTablesFromParseResult(pr *pg_query.ParseResult) []TableParam {
+	var tables []TableParam
 	for _, s := range pr.Stmts {
 		tables = append(tables, getTablesFromNode(s.Stmt, 0)...)
 	}
-	newTables := make([]proto.Table, 0)
+	newTables := make([]TableParam, 0)
 	tableMap := make(map[string]struct{})
 	for _, t := range tables {
 		key := t.Db + "." + t.Table
@@ -394,11 +408,4 @@ func getTablesFromParseResult(pr *pg_query.ParseResult) []proto.Table {
 		}
 	}
 	return newTables
-}
-
-func getDefaultSchema(table string) string {
-	if strings.HasPrefix(table, "pg_") {
-		return "pg_catalog"
-	}
-	return defaultSchema
 }

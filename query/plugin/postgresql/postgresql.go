@@ -85,7 +85,7 @@ func (m *PostgreSQL) explain(cmd *proto.Cmd, in proto.Instance) (interface{}, er
 }
 
 func (m *PostgreSQL) tableInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	tableInfo := &proto.TableInfoQuery{}
+	tableInfo := &tableinfo.TableInfoQuery{}
 	if err := json.Unmarshal(cmd.Data, tableInfo); err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func (m *PostgreSQL) tableInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, 
 }
 
 func (m *PostgreSQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	param := &proto.QueryInfoParam{}
+	param := &queryinfo.QueryInfoParam{}
 	if err := json.Unmarshal(cmd.Data, param); err != nil {
 		return nil, err
 	}
