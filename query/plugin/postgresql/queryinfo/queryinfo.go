@@ -51,59 +51,18 @@ func GetQueryInfo(db *sql.DB, param *QueryInfoParam) (*QueryInfoResult, error) {
 	var err error
 
 	if len(param.Table) > 0 {
-		tableNames := make([]string, 0)
-		for i := range param.Table {
-			if param.Table[i].Db == "" {
-				tableNames = append(tableNames, param.Table[i].Table)
-			}
-		}
-
-		// there are some tables don't have
-		// explicit schemas, we guess it
-		if len(tableNames) > 0 {
-			guessMap, err = getGuessSchemasOfTables(db, tableNames)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		if len(guessMap) > 0 {
-			for i := range param.Table {
-				if len(param.Table[i].Db) > 0 {
-					continue
-				}
-				if guessSchema, ok := guessMap[param.Table[i].Table]; ok {
-					param.Table[i].Db = guessSchema.DB
-					param.Table[i].GuessSchema = &guessSchema
-				}
-			}
-			for i := range param.Index {
-				if len(param.Index[i].Db) > 0 {
-					continue
-				}
-				if guessSchema, ok := guessMap[param.Index[i].Table]; ok {
-					param.Index[i].Db = guessSchema.DB
-					param.Index[i].GuessSchema = &guessSchema
-				}
-			}
-			for i := range param.Status {
-				if len(param.Status[i].Db) > 0 {
-					continue
-				}
-				if guessSchema, ok := guessMap[param.Status[i].Table]; ok {
-					param.Status[i].Db = guessSchema.DB
-					param.Status[i].GuessSchema = &guessSchema
-				}
-			}
-		}
-
-		tableRes, err := tableinfo.GetTableInfo(db, &tableinfo.TableInfoQuery{
+		tableQuery := &tableinfo.TableInfoQuery{
 			UUID:   param.UUID,
 			DB:     param.DB,
 			Create: param.Table,
 			Index:  param.Index,
 			Status: param.Status,
-		})
+		}
+		if err = tableinfo.GuessAndFillSchemas(db, tableQuery); err != nil {
+			return nil, err
+		}
+
+		tableRes, err := tableinfo.GetTableInfo(db, tableQuery)
 		if err != nil {
 			return nil, err
 		}
@@ -194,59 +153,6 @@ func shouldSkipExplain(query string) bool {
 	}
 
 	return util.IsJSONKeyExists(parseTree, "ParamRef", 0)
-}
-
-// getGuessSchemasOfTables tries to guess the schemas of
-// tableNames (using information_schema.tables),
-// a nil result will be returned if the tables are not found
-func getGuessSchemasOfTables(db *sql.DB, tableNames []string) (map[string]proto.GuessDB, error) {
-	if len(tableNames) == 0 {
-		return nil, nil
-	}
-
-	names := make([]interface{}, len(tableNames))
-	for i := range tableNames {
-		names[i] = tableNames[i]
-	}
-
-	// fetch 2 rows to compare, see if it's ambiguous
-	rows, err := db.Query(fmt.Sprintf(`
-		SELECT tables.table_schema, tables.table_name, pg_class.reltuples::bigint AS table_rows
-		FROM information_schema.tables tables
-		LEFT JOIN pg_class ON pg_class.oid = CONCAT(tables.table_schema, '.', tables.table_name)::regclass
-		WHERE tables.table_name IN (%s)
-		ORDER BY table_rows DESC
-	`, util.NumericPlaceholders(len(names))), names...)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	guessMap := make(map[string]proto.GuessDB)
-	for rows.Next() {
-		var schema, table string
-		var tableRows int64
-
-		err = rows.Scan(&schema, &table, &tableRows)
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		if guessDB, exists := guessMap[table]; !exists || !guessDB.IsAmbiguous {
-			guessMap[table] = proto.GuessDB{
-				DB:          schema,
-				IsAmbiguous: exists,
-			}
-		}
-	}
-
-	return guessMap, nil
 }
 
 // getGuessSchemasOfProcedures tries to guess the schemas of

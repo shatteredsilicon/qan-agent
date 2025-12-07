@@ -64,114 +64,126 @@ type TableInfoQuery struct {
 
 type TableInfoResult map[string]*TableInfo
 
-func GetTableInfo(db *sql.DB, tables *TableInfoQuery) (TableInfoResult, error) {
+func GetTableInfo(db *sql.DB, tableQuery *TableInfoQuery) (TableInfoResult, error) {
 	res := make(TableInfoResult)
 
-	createList := append([]TableParam{}, tables.Create...)
-	indexList := append([]TableParam{}, tables.Index...)
-	statusList := append([]TableParam{}, tables.Status...)
+	createList := append([]TableParam{}, tableQuery.Create...)
+	indexList := append([]TableParam{}, tableQuery.Index...)
+	statusList := append([]TableParam{}, tableQuery.Status...)
 
-	if len(tables.Create) > 0 {
-		for i := 0; i < len(createList); i++ {
-			t := createList[i]
-
-			dbTable := t.Table
-			if len(t.Db) > 0 {
-				dbTable = t.Db + "." + t.Table
+	for i := 0; i < len(createList) || i < len(tableQuery.Create); i++ {
+		if i >= len(createList) {
+			if err := GuessAndFillSchemas(db, &TableInfoQuery{
+				UUID:   tableQuery.UUID,
+				DB:     tableQuery.DB,
+				Create: tableQuery.Create[i:],
+				Index:  tableQuery.Index[i:],
+				Status: tableQuery.Status[i:],
+			}); err != nil {
+				// ignore this error, as we already get sufficient table info
+				// for top level tables.
+				break
 			}
 
-			tableInfo, ok := res[dbTable]
-			if !ok {
-				res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
-				tableInfo = res[dbTable]
-			}
-
-			schema := util.EscapeString(t.Db)
-			table := util.EscapeString(t.Table)
-			tableType, def, err := showCreate(db, tables.DB, schema, table)
-			if err != nil {
-				if tableInfo.Errors == nil {
-					tableInfo.Errors = []string{}
-				}
-				tableInfo.Errors = append(tableInfo.Errors, fmt.Sprintf("SHOW CREATE TABLE %s: %s", t.Table, err))
-				continue
-			}
-			tableInfo.Create = def
-			tableInfo.Type = tableType
-
-			if tableType != proto.TypeDBView {
-				continue
-			}
-
-			pr, err := pg_query.Parse(def)
-			if err != nil {
-				continue
-			}
-			tables := getTablesFromParseResult(pr)
-			createList = append(createList, tables...)
-			indexList = append(indexList, tables...)
-			statusList = append(statusList, tables...)
+			createList = append(createList, tableQuery.Create[i:]...)
+			indexList = append(indexList, tableQuery.Index[i:]...)
+			statusList = append(statusList, tableQuery.Status[i:]...)
 		}
+
+		t := createList[i]
+
+		dbTable := t.Table
+		if len(t.Db) > 0 {
+			dbTable = t.Db + "." + t.Table
+		}
+
+		tableInfo, ok := res[dbTable]
+		if !ok {
+			res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
+			tableInfo = res[dbTable]
+		}
+
+		schema := util.EscapeString(t.Db)
+		table := util.EscapeString(t.Table)
+		tableType, def, err := showCreate(db, tableQuery.DB, schema, table)
+		if err != nil {
+			if tableInfo.Errors == nil {
+				tableInfo.Errors = []string{}
+			}
+			tableInfo.Errors = append(tableInfo.Errors, fmt.Sprintf("Can't get definition of %s: %s", t.Table, err))
+			continue
+		}
+		tableInfo.Create = def
+		tableInfo.Type = tableType
+
+		if tableType != proto.TypeDBView {
+			continue
+		}
+
+		pr, err := pg_query.Parse(def)
+		if err != nil {
+			continue
+		}
+		tables := getTablesFromParseResult(pr)
+		tableQuery.Create = append(tableQuery.Create, tables...)
+		tableQuery.Index = append(tableQuery.Index, tables...)
+		tableQuery.Status = append(tableQuery.Status, tables...)
 	}
 
-	if len(tables.Index) > 0 {
-		for _, t := range indexList {
-			dbTable := t.Table
-			if len(t.Db) > 0 {
-				dbTable = t.Db + "." + t.Table
-			}
-
-			tableInfo, ok := res[dbTable]
-			if !ok {
-				res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
-				tableInfo = res[dbTable]
-			}
-			if tableInfo.Type == proto.TypeDBView {
-				continue
-			}
-
-			schema := util.EscapeString(t.Db)
-			table := util.EscapeString(t.Table)
-			indexes, err := showIndex(db, schema, table)
-			if err != nil {
-				if tableInfo.Errors == nil {
-					tableInfo.Errors = []string{}
-				}
-				tableInfo.Errors = append(tableInfo.Errors, fmt.Sprintf("SHOW INDEX FROM %s.%s: %s", t.Db, t.Table, err))
-				continue
-			}
-			tableInfo.Index = indexes
+	for _, t := range indexList {
+		dbTable := t.Table
+		if len(t.Db) > 0 {
+			dbTable = t.Db + "." + t.Table
 		}
+
+		tableInfo, ok := res[dbTable]
+		if !ok {
+			res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
+			tableInfo = res[dbTable]
+		}
+		if tableInfo.Type == proto.TypeDBView {
+			continue
+		}
+
+		schema := util.EscapeString(t.Db)
+		table := util.EscapeString(t.Table)
+		indexes, err := showIndex(db, schema, table)
+		if err != nil {
+			if tableInfo.Errors == nil {
+				tableInfo.Errors = []string{}
+			}
+			tableInfo.Errors = append(tableInfo.Errors, fmt.Sprintf("Can't get INDEX information of %s.%s: %s", t.Db, t.Table, err))
+			continue
+		}
+		tableInfo.Index = indexes
 	}
 
-	if len(tables.Status) > 0 {
-		for _, t := range statusList {
-			dbTable := t.Table
-			if len(t.Db) > 0 {
-				dbTable = t.Db + "." + t.Table
-			}
-
-			tableInfo, ok := res[dbTable]
-			if !ok {
-				res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
-				tableInfo = res[dbTable]
-			}
-			if tableInfo.Type == proto.TypeDBView {
-				continue
-			}
-
-			schema := util.EscapeString(t.Db)
-			table := util.EscapeString(t.Table)
-			status, err := showStatus(db, schema, table)
-			if err != nil {
-				if tableInfo.Errors == nil {
-					tableInfo.Errors = []string{}
-				}
-				tableInfo.Errors = append(tableInfo.Errors, fmt.Sprintf("SHOW TABLE STATUS FROM %s WHERE Name='%s': %s", t.Db, t.Table, err))
-				continue
-			}
-			tableInfo.Status = status
+	for _, t := range statusList {
+		dbTable := t.Table
+		if len(t.Db) > 0 {
+			dbTable = t.Db + "." + t.Table
 		}
+
+		tableInfo, ok := res[dbTable]
+		if !ok {
+			res[dbTable] = &TableInfo{GuessSchema: t.GuessSchema}
+			tableInfo = res[dbTable]
+		}
+		if tableInfo.Type == proto.TypeDBView {
+			continue
+		}
+
+		schema := util.EscapeString(t.Db)
+		table := util.EscapeString(t.Table)
+		status, err := showStatus(db, schema, table)
+		if err != nil {
+			if tableInfo.Errors == nil {
+				tableInfo.Errors = []string{}
+			}
+			tableInfo.Errors = append(tableInfo.Errors, fmt.Sprintf("Can't get STATUS information of %s.%s: %s", t.Db, t.Table, err))
+			continue
+		}
+		tableInfo.Status = status
 	}
 
 	return res, nil
@@ -408,4 +420,110 @@ func getTablesFromParseResult(pr *pg_query.ParseResult) []TableParam {
 		}
 	}
 	return newTables
+}
+
+func GuessAndFillSchemas(db *sql.DB, query *TableInfoQuery) error {
+	guessMap := make(map[string]proto.GuessDB)
+	var err error
+
+	tableNames := make([]string, 0)
+	for i := range query.Create {
+		if query.Create[i].Db == "" {
+			tableNames = append(tableNames, query.Create[i].Table)
+		}
+	}
+
+	// there are some tables don't have
+	// explicit schemas, we guess it
+	if len(tableNames) > 0 {
+		guessMap, err = getGuessSchemasOfTables(db, tableNames)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(guessMap) > 0 {
+		for i := range query.Create {
+			if len(query.Create[i].Db) > 0 {
+				continue
+			}
+			if guessSchema, ok := guessMap[query.Create[i].Table]; ok {
+				query.Create[i].Db = guessSchema.DB
+				query.Create[i].GuessSchema = &guessSchema
+			}
+		}
+		for i := range query.Index {
+			if len(query.Index[i].Db) > 0 {
+				continue
+			}
+			if guessSchema, ok := guessMap[query.Index[i].Table]; ok {
+				query.Index[i].Db = guessSchema.DB
+				query.Index[i].GuessSchema = &guessSchema
+			}
+		}
+		for i := range query.Status {
+			if len(query.Status[i].Db) > 0 {
+				continue
+			}
+			if guessSchema, ok := guessMap[query.Status[i].Table]; ok {
+				query.Status[i].Db = guessSchema.DB
+				query.Status[i].GuessSchema = &guessSchema
+			}
+		}
+	}
+
+	return nil
+}
+
+// getGuessSchemasOfTables tries to guess the schemas of
+// tableNames (using information_schema.tables),
+// a nil result will be returned if the tables are not found
+func getGuessSchemasOfTables(db *sql.DB, tableNames []string) (map[string]proto.GuessDB, error) {
+	if len(tableNames) == 0 {
+		return nil, nil
+	}
+
+	names := make([]interface{}, len(tableNames))
+	for i := range tableNames {
+		names[i] = tableNames[i]
+	}
+
+	// fetch 2 rows to compare, see if it's ambiguous
+	rows, err := db.Query(fmt.Sprintf(`
+		SELECT tables.table_schema, tables.table_name, pg_class.reltuples::bigint AS table_rows
+		FROM information_schema.tables tables
+		LEFT JOIN pg_class ON pg_class.oid = CONCAT(tables.table_schema, '.', tables.table_name)::regclass
+		WHERE tables.table_name IN (%s)
+		ORDER BY table_rows DESC
+	`, util.NumericPlaceholders(len(names))), names...)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	guessMap := make(map[string]proto.GuessDB)
+	for rows.Next() {
+		var schema, table string
+		var tableRows int64
+
+		err = rows.Scan(&schema, &table, &tableRows)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if guessDB, exists := guessMap[table]; !exists || !guessDB.IsAmbiguous {
+			guessMap[table] = proto.GuessDB{
+				DB:          schema,
+				IsAmbiguous: exists,
+			}
+		}
+	}
+
+	return guessMap, nil
 }
