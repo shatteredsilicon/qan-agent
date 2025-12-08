@@ -1,6 +1,10 @@
 package util
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+	"unicode"
+)
 
 // Ident wrap the db and names in ` to make them legit
 func Ident(db, name string) string {
@@ -37,4 +41,36 @@ func EscapeString(v string) string {
 // Placeholders generate SQL placeholders
 func Placeholders(length int) string {
 	return strings.Join(strings.Split(strings.Repeat("?", length), ""), ",")
+}
+
+// NumericPlaceholders generate numeric SQL placeholders
+func NumericPlaceholders(length int) string {
+	if length < 1 {
+		return ""
+	}
+
+	placeholders := "$1"
+	for i := 1; i < length; i++ {
+		placeholders += fmt.Sprintf(",$%d", i+1)
+	}
+	return placeholders
+}
+
+func Split(s string, delimer rune) []string {
+	lastQuote := rune(0)
+	f := func(c rune) bool {
+		switch {
+		case c == lastQuote:
+			lastQuote = rune(0)
+			return false
+		case lastQuote != rune(0):
+			return false
+		case unicode.In(c, unicode.Quotation_Mark):
+			lastQuote = c
+			return false
+		default:
+			return c == delimer
+		}
+	}
+	return strings.FieldsFunc(s, f)
 }

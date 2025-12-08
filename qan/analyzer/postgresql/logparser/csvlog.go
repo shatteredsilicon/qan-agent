@@ -22,7 +22,7 @@ func NewCSVLogParser() LogParser {
 	return &CSVLogParser{}
 }
 
-func (p *CSVLogParser) Parse(ctx context.Context, f *os.File, c chan<- Event) error {
+func (p *CSVLogParser) Parse(ctx context.Context, f *os.File, c chan<- *Event) error {
 	reader := csv.NewReader(f)
 	for {
 		line, err := reader.Read()
@@ -43,7 +43,10 @@ func (p *CSVLogParser) Parse(ctx context.Context, f *os.File, c chan<- Event) er
 			continue
 		}
 
-		q := match[0][2]
+		q := match[0][3]
+		if len(match[0][4]) > 0 {
+			q = match[0][4]
+		}
 		fingerprint, err := pg_query.Normalize(q)
 		if err != nil {
 			return err
@@ -51,7 +54,7 @@ func (p *CSVLogParser) Parse(ctx context.Context, f *os.File, c chan<- Event) er
 		id := query.Id(fingerprint)
 		queryTime, _ := strconv.ParseFloat(match[0][1], 64)
 
-		c <- Event{
+		c <- &Event{
 			ID:          id,
 			Fingerprint: fingerprint,
 			Query:       q,

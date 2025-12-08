@@ -25,7 +25,7 @@ func NewMetrics() *Metrics {
 }
 
 // AddEvent saves all the metrics of the event.
-func (m *Metrics) AddEvent(e logparser.Event) {
+func (m *Metrics) AddEvent(e *logparser.Event) {
 	for metric, val := range e.TimeMetrics {
 		stats, seenMetric := m.TimeMetrics[metric]
 		if !seenMetric {

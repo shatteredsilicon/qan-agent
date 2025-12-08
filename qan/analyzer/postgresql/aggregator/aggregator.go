@@ -45,7 +45,7 @@ func NewAggregator(samples bool) *Aggregator {
 
 // AddEvent adds the event to the aggregator, automatically creating new classes
 // as needed.
-func (a *Aggregator) AddEvent(e logparser.Event) {
+func (a *Aggregator) AddEvent(e *logparser.Event) {
 	classes, ok := a.classes[e.LogEntry.LogTime.Unix()]
 	if !ok {
 		classes = make(map[string]*Class)
@@ -103,7 +103,7 @@ func (a *Aggregator) Finalize(config config.QAN, startTime, endTime time.Time) *
 
 // ShouldFinalize checks whether it should finialize before
 // adding a new event
-func (a *Aggregator) ShouldFinalize(event logparser.Event) bool {
+func (a *Aggregator) ShouldFinalize(event *logparser.Event) bool {
 	return a.classes[event.LogEntry.LogTime.Unix()] == nil && len(a.classes) >= defaultTsLength || a.eventSize >= maxEventSize
 }
 
