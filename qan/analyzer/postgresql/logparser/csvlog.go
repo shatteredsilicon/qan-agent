@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"errors"
 	"io"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -22,7 +21,7 @@ func NewCSVLogParser() LogParser {
 	return &CSVLogParser{}
 }
 
-func (p *CSVLogParser) Parse(ctx context.Context, f *os.File, c chan<- *Event) error {
+func (p *CSVLogParser) Parse(ctx context.Context, f io.Reader, c chan<- *Event) error {
 	reader := csv.NewReader(f)
 	for {
 		line, err := reader.Read()
@@ -67,8 +66,8 @@ func (p *CSVLogParser) Parse(ctx context.Context, f *os.File, c chan<- *Event) e
 	return nil
 }
 
-func (p *CSVLogParser) IsFileAcceptable(entry os.DirEntry) bool {
-	return !entry.IsDir() && strings.HasSuffix(entry.Name(), ".csv")
+func (p *CSVLogParser) IsFileAcceptable(filename string) bool {
+	return strings.HasSuffix(filename, ".csv")
 }
 
 func (p *CSVLogParser) parseLine(fields []string) (*LogEntry, error) {

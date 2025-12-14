@@ -31,8 +31,8 @@ func (f ByFileName) Less(i, j int) bool {
 	return false
 }
 
-// GetSlowQueryLogFiles returns log file details of aws rds
-func (svc *Service) GetSlowQueryLogFiles(lastWritten *int64, prefix *string) ([]*rds.DescribeDBLogFilesDetails, error) {
+// GetLogFiles returns log file details of aws rds
+func (svc *Service) GetLogFiles(lastWritten *int64, prefix *string) ([]*rds.DescribeDBLogFilesDetails, error) {
 	files := make([]*rds.DescribeDBLogFilesDetails, 0)
 
 	result, err := svc.DescribeDBLogFiles(&rds.DescribeDBLogFilesInput{

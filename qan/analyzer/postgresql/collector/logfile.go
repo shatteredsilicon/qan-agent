@@ -154,7 +154,7 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 			continue
 		}
 
-		if !logParser.IsFileAcceptable(entry) {
+		if !logParser.IsFileAcceptable(entry.Name()) {
 			continue
 		}
 

@@ -3,8 +3,8 @@ package logparser
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"math"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -25,8 +25,8 @@ var (
 )
 
 type LogParser interface {
-	Parse(context.Context, *os.File, chan<- *Event) error
-	IsFileAcceptable(os.DirEntry) bool
+	Parse(context.Context, io.Reader, chan<- *Event) error
+	IsFileAcceptable(string) bool
 }
 
 type LogParserFunc func() LogParser
