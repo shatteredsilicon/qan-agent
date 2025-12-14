@@ -202,7 +202,7 @@ func (w *Worker) setupRDS() error {
 		return err
 	}
 
-	rdsSvcDetail, err := GetRDSServiceDetail(*agentConfig, w.config)
+	rdsSvcDetail, err := rds.GetRDSServiceDetail(*agentConfig, w.config.QAN)
 	if err != nil {
 		w.logger.Error(fmt.Sprintf("Error fetching rds service detail: %s\n", err.Error()))
 		return err
@@ -445,7 +445,7 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 		return nil, stopped, nil
 	}
 
-	files, err := w.rds.GetSlowQueryLogFiles(w.LastWritten, &currentLogFile)
+	files, err := w.rds.GetLogFiles(w.LastWritten, &currentLogFile)
 	if err != nil {
 		w.logger.Error(fmt.Sprintf("fetching rds log files failed: %+v", err))
 		return nil, stopped, err

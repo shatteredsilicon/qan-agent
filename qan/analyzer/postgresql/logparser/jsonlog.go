@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 	"strconv"
 	"strings"
 
@@ -27,7 +27,7 @@ func NewJSONLogParser() LogParser {
 	return &JSONLogParser{}
 }
 
-func (p *JSONLogParser) Parse(ctx context.Context, f *os.File, c chan<- *Event) error {
+func (p *JSONLogParser) Parse(ctx context.Context, f io.Reader, c chan<- *Event) error {
 	reader := bufio.NewScanner(f)
 	for reader.Scan() {
 		var e JSONLogEntry
@@ -72,6 +72,6 @@ func (p *JSONLogParser) Parse(ctx context.Context, f *os.File, c chan<- *Event) 
 	return nil
 }
 
-func (p *JSONLogParser) IsFileAcceptable(entry os.DirEntry) bool {
-	return !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json")
+func (p *JSONLogParser) IsFileAcceptable(filename string) bool {
+	return strings.HasSuffix(filename, ".json")
 }

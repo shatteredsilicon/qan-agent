@@ -105,12 +105,16 @@ func (a *PGAnalyzer) Start() error {
 		a.collector = collector.NewLogFileCollector(a.config.QAN, a.logger, db, a.spool)
 	case "table":
 		a.collector = collector.NewTableCollector(a.config.QAN, a.logger, db, a.spool)
+	case "rds-logfile":
+		a.collector = collector.NewRDSLogFileCollector(a.config.QAN, a.logger, a.spool)
 	default:
 		return errors.New("unspported CollectFrom option")
 	}
 
 	a.db = db
-	a.collector.Prepare()
+	if err = a.collector.Prepare(); err != nil {
+		return err
+	}
 
 	a.running = true
 	go a.run()
@@ -167,7 +171,15 @@ func (a *PGAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 	}
 }
 
-func (*PGAnalyzer) Messages() []proto.Message {
+func (a *PGAnalyzer) Messages() []proto.Message {
+	if a.collector == nil {
+		return []proto.Message{}
+	}
+
+	if c, ok := a.collector.(*collector.RDSLogFileCollector); ok {
+		return c.Messages()
+	}
+
 	return []proto.Message{}
 }
 
