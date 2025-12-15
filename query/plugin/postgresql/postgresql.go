@@ -66,7 +66,7 @@ func (m *PostgreSQL) Handle(cmd *proto.Cmd, in proto.Instance) (interface{}, err
 type execFunc func(cmd *proto.Cmd, in proto.Instance) (interface{}, error)
 
 func (m *PostgreSQL) explain(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	q := &proto.ExplainQuery{}
+	q := &explain.ExplainQuery{}
 	if err := json.Unmarshal(cmd.Data, q); err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (m *PostgreSQL) explain(cmd *proto.Cmd, in proto.Instance) (interface{}, er
 	}
 	defer db.Close()
 
-	result, err := explain.Explain(db, q.Query, q.Convert, len(q.WithExplainRows) > 0)
+	result, err := explain.Explain(db, q.Query, q.GuessedSchemas)
 	if result != nil && len(q.WithExplainRows) > 0 {
 		result.Classic = q.WithExplainRows
 	}
