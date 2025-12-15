@@ -193,9 +193,10 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 
 		record, recordExists := c.records[filename]
 		if !recordExists || record == nil {
+			zeroMarker := rds.ZeroMarker
 			record = &rdsLogFileRecord{
 				previousData: []byte{},
-				marker:       nil,
+				marker:       &zeroMarker,
 			}
 		}
 		records[filename] = record
@@ -252,7 +253,7 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 				}
 
 				if err := p.Parse(ctx, bytes.NewReader([]byte(completeLog)), ch); err != nil {
-					c.logger.Error("failed to parse file", f.LogFileName, ":", err)
+					c.logger.Error("failed to parse file", *f.LogFileName, ":", err)
 					return
 				}
 
