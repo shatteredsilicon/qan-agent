@@ -27,6 +27,7 @@ var (
 type LogParser interface {
 	Parse(context.Context, io.Reader, chan<- *Event) error
 	IsFileAcceptable(string) bool
+	SplitLog([]byte) ([]byte, []byte)
 }
 
 type LogParserFunc func() LogParser

@@ -237,22 +237,16 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 				if dataOutput.LogFileData != nil {
 					data.WriteString(*dataOutput.LogFileData)
 				}
-				dataStr := data.String()
 
-				var completeLog string
+				var completeLog []byte
 				var incompleteLog []byte
-				if shouldBreak {
-					completeLog = dataStr
+				if shouldBreak || data.Len() < 1024*1024 {
+					completeLog = data.Bytes()
 				} else {
-					// Leave last line to next batch in case it's not a complete log
-					lastNewLinePos := strings.LastIndex(dataStr, "\n")
-					completeLog = dataStr[:lastNewLinePos]
-					if lastNewLinePos < len(dataStr)-1 {
-						incompleteLog = []byte(dataStr[lastNewLinePos+1:])
-					}
+					completeLog, incompleteLog = p.SplitLog(data.Bytes())
 				}
 
-				if err := p.Parse(ctx, bytes.NewReader([]byte(completeLog)), ch); err != nil {
+				if err := p.Parse(ctx, bytes.NewReader(completeLog), ch); err != nil {
 					c.logger.Error("failed to parse file", *f.LogFileName, ":", err)
 					return
 				}
