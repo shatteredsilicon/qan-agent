@@ -14,12 +14,12 @@ import (
 // QueryInfo represents a TABLE/PROCEDURE/VIEW
 // structure of QueryInfo cmd api
 type QueryInfo struct {
-	Type            proto.DBObjectType
-	Create          string                            `json:",omitempty"`
-	Index           map[string]*tableinfo.IndexStatus `json:",omitempty"`
-	Status          *tableinfo.TableStatus            `json:",omitempty"`
-	Errors          []string                          `json:",omitempty"`
-	IsSchemaGuessed bool                              `json:",omitempty"`
+	Type        proto.DBObjectType
+	Create      string                            `json:",omitempty"`
+	Index       map[string]*tableinfo.IndexStatus `json:",omitempty"`
+	Status      *tableinfo.TableStatus            `json:",omitempty"`
+	Errors      []string                          `json:",omitempty"`
+	GuessSchema *proto.GuessDB                    `json:",omitempty"`
 }
 
 // QueryInfoResult represents the response
@@ -68,12 +68,12 @@ func GetQueryInfo(db *sql.DB, param *QueryInfoParam) (*QueryInfoResult, error) {
 		}
 		for k, v := range tableRes {
 			res[k] = &QueryInfo{
-				Type:            v.Type,
-				Create:          v.Create,
-				Index:           v.Index,
-				Status:          v.Status,
-				Errors:          v.Errors,
-				IsSchemaGuessed: v.GuessSchema != nil && v.GuessSchema.IsAmbiguous,
+				Type:        v.Type,
+				Create:      v.Create,
+				Index:       v.Index,
+				Status:      v.Status,
+				Errors:      v.Errors,
+				GuessSchema: v.GuessSchema,
 			}
 		}
 	}
@@ -111,7 +111,7 @@ func GetQueryInfo(db *sql.DB, param *QueryInfoParam) (*QueryInfoResult, error) {
 			dbProcedure := p.DB + "." + p.Name
 			queryInfo, ok := res[dbProcedure]
 			if !ok {
-				res[dbProcedure] = &QueryInfo{IsSchemaGuessed: p.GuessSchema != nil && p.GuessSchema.IsAmbiguous}
+				res[dbProcedure] = &QueryInfo{GuessSchema: p.GuessSchema}
 				queryInfo = res[dbProcedure]
 			}
 

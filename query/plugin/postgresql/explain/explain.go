@@ -6,20 +6,30 @@ import (
 	"regexp"
 	"strings"
 
+	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/shatteredsilicon/ssm/proto"
-	"vitess.io/vitess/go/vt/sqlparser"
 )
 
 var (
 	unsupportedRegex = regexp.MustCompile(`^(?i)\s*(CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|VACUUM|ANALYZE|EXPLAIN)`)
 )
 
-func Explain(db *sql.DB, query string, convert, ignoreClassic bool) (*proto.ExplainResult, error) {
+type ExplainQuery struct {
+	proto.ExplainQuery
+	GuessedSchemas map[string]string
+}
+
+type ExplainResult struct {
+	proto.ExplainResult
+	IsSchemaGuessed bool
+}
+
+func Explain(db *sql.DB, query string, guessedSchemas map[string]string) (*ExplainResult, error) {
 	if unsupportedRegex.Match([]byte(query)) {
 		return nil, nil
 	}
 
-	explainResult, err := explain(db, query, ignoreClassic)
+	explainResult, err := explain(db, query, guessedSchemas)
 	if err != nil {
 		return nil, err
 	}
@@ -28,52 +38,134 @@ func Explain(db *sql.DB, query string, convert, ignoreClassic bool) (*proto.Expl
 
 // --------------------------------------------------------------------------
 
-func explain(db *sql.DB, query string, ignoreClassic bool) (*proto.ExplainResult, error) {
-	explain := &proto.ExplainResult{}
+func explain(db *sql.DB, query string, guessedSchemas map[string]string) (*ExplainResult, error) {
+	explain := &ExplainResult{}
 	var originErr error
-	explain.TEXT, explain.JSON, originErr = realExplain(db, query, ignoreClassic)
+	explain.TEXT, explain.JSON, originErr = realExplain(db, query)
 	if originErr == nil {
 		return explain, nil
 	}
 
 	// First try failed, see if this is a query that we can
-	// adjust to make EXPLAIN works
-	s, err := sqlparser.NewTestParser().Parse(query)
+	// guess the schemas to make EXPLAIN works
+	s, err := pg_query.Parse(query)
 	if err != nil {
 		return nil, originErr
 	}
 
-	var newQuery string
-	switch s.(type) {
-	case *sqlparser.Delete: // DELETE statement, try changing it to SELECT statement
-		if indexes := regexp.MustCompile(`(?i)\sFROM\s`).FindIndex([]byte(query)); len(indexes) > 0 {
-			newQuery = fmt.Sprintf("SELECT * %s", query[indexes[0]:])
+	parseNodes := make([]*pg_query.Node, 0)
+	for i := range s.Stmts {
+		parseNodes = append(parseNodes, s.Stmts[i].Stmt)
+	}
+
+	for i := 0; i < len(parseNodes); i++ {
+		if parseNodes[i] == nil {
+			continue
 		}
-	case *sqlparser.Insert:
-		switch s.(*sqlparser.Insert).Rows.(type) {
-		case *sqlparser.Select: // INSERT INTO ... SELECT statement, try explaining the SELECT part only
-			newQuery = sqlparser.String(s.(*sqlparser.Insert).Rows)
+
+		switch s := parseNodes[i].Node.(type) {
+		case *pg_query.Node_SelectStmt:
+			parseNodes = append(parseNodes, s.SelectStmt.TargetList...)
+			parseNodes = append(parseNodes, s.SelectStmt.FromClause...)
+		case *pg_query.Node_InsertStmt:
+			if s.InsertStmt.Relation != nil {
+				if s.InsertStmt.Relation.Schemaname == "" && guessedSchemas[s.InsertStmt.Relation.Relname] != "" {
+					s.InsertStmt.Relation.Schemaname = guessedSchemas[s.InsertStmt.Relation.Relname]
+				}
+			}
+			if s.InsertStmt.SelectStmt != nil {
+				parseNodes = append(parseNodes, s.InsertStmt.SelectStmt)
+			}
+		case *pg_query.Node_UpdateStmt:
+			if s.UpdateStmt.Relation != nil {
+				if s.UpdateStmt.Relation.Schemaname == "" && guessedSchemas[s.UpdateStmt.Relation.Relname] != "" {
+					s.UpdateStmt.Relation.Schemaname = guessedSchemas[s.UpdateStmt.Relation.Relname]
+				}
+			}
+			if s.UpdateStmt.WhereClause != nil {
+				parseNodes = append(parseNodes, s.UpdateStmt.WhereClause)
+			}
+			parseNodes = append(parseNodes, s.UpdateStmt.FromClause...)
+		case *pg_query.Node_DeleteStmt:
+			if s.DeleteStmt.Relation != nil {
+				if s.DeleteStmt.Relation.Schemaname == "" && guessedSchemas[s.DeleteStmt.Relation.Relname] != "" {
+					s.DeleteStmt.Relation.Schemaname = guessedSchemas[s.DeleteStmt.Relation.Relname]
+				}
+			}
+			if s.DeleteStmt.WhereClause != nil {
+				parseNodes = append(parseNodes, s.DeleteStmt.WhereClause)
+			}
+		case *pg_query.Node_MergeStmt:
+			if s.MergeStmt.Relation != nil {
+				if s.MergeStmt.Relation.Schemaname == "" && guessedSchemas[s.MergeStmt.Relation.Relname] != "" {
+					s.MergeStmt.Relation.Schemaname = guessedSchemas[s.MergeStmt.Relation.Relname]
+				}
+			}
+			if s.MergeStmt.SourceRelation != nil {
+				parseNodes = append(parseNodes, s.MergeStmt.SourceRelation)
+			}
+		case *pg_query.Node_CreateTableAsStmt:
+			if s.CreateTableAsStmt.Query != nil {
+				parseNodes = append(parseNodes, s.CreateTableAsStmt.Query)
+			}
+		case *pg_query.Node_TableLikeClause:
+			if s.TableLikeClause.Relation.Schemaname == "" && guessedSchemas[s.TableLikeClause.Relation.Relname] != "" {
+				s.TableLikeClause.Relation.Schemaname = guessedSchemas[s.TableLikeClause.Relation.Relname]
+			}
+		case *pg_query.Node_FromExpr:
+			parseNodes = append(parseNodes, s.FromExpr.Fromlist...)
+		case *pg_query.Node_FuncCall:
+			parseNodes = append(parseNodes, s.FuncCall.Args...)
+		case *pg_query.Node_FuncExpr:
+			parseNodes = append(parseNodes, s.FuncExpr.Args...)
+		case *pg_query.Node_ResTarget:
+			parseNodes = append(parseNodes, s.ResTarget.Indirection...)
+			if s.ResTarget.Val != nil {
+				parseNodes = append(parseNodes, s.ResTarget.Val)
+			}
+		case *pg_query.Node_JoinExpr:
+			if s.JoinExpr.Larg != nil {
+				parseNodes = append(parseNodes, s.JoinExpr.Larg)
+			}
+			if s.JoinExpr.Rarg != nil {
+				parseNodes = append(parseNodes, s.JoinExpr.Rarg)
+			}
+		case *pg_query.Node_RangeVar:
+			if s.RangeVar.Schemaname == "" && guessedSchemas[s.RangeVar.Relname] != "" {
+				s.RangeVar.Schemaname = guessedSchemas[s.RangeVar.Relname]
+			}
+		case *pg_query.Node_AExpr:
+			if s.AExpr.Lexpr != nil {
+				parseNodes = append(parseNodes, s.AExpr.Lexpr)
+			}
+			if s.AExpr.Rexpr != nil {
+				parseNodes = append(parseNodes, s.AExpr.Rexpr)
+			}
+		case *pg_query.Node_SubLink:
+			if s.SubLink.Subselect != nil {
+				parseNodes = append(parseNodes, s.SubLink.Subselect)
+			}
 		}
 	}
 
+	newQuery, _ := pg_query.Deparse(s)
 	if newQuery == "" {
 		return nil, originErr
 	}
 
-	explain.TEXT, explain.JSON, err = realExplain(db, newQuery, ignoreClassic)
+	explain.TEXT, explain.JSON, err = realExplain(db, newQuery)
 	if err != nil {
 		return nil, err
 	}
 
+	explain.IsSchemaGuessed = true
 	return explain, nil
 }
 
-func realExplain(db *sql.DB, query string, ignoreText bool) (text, json string, err error) {
-	if !ignoreText {
-		text, err = textExplain(db, query)
-		if err != nil {
-			return "", "", err
-		}
+func realExplain(db *sql.DB, query string) (text, json string, err error) {
+	text, err = textExplain(db, query)
+	if err != nil {
+		return "", "", err
 	}
 
 	json, err = jsonExplain(db, query)
