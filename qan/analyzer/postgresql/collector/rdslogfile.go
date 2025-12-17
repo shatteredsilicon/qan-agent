@@ -55,13 +55,16 @@ func NewRDSLogFileCollector(config config.QAN, logger *pct.Logger, spooler data.
 	}
 }
 
-func (c *RDSLogFileCollector) Prepare() error {
-	return c.setupRDS()
-}
+func (c *RDSLogFileCollector) Prepare() error { return nil }
 
 func (c *RDSLogFileCollector) Stop() {}
 
 func (c *RDSLogFileCollector) Start(ctx context.Context) {
+	if err := c.setupRDS(); err != nil {
+		c.logger.Error("failed to setup RDS service:", err)
+		return
+	}
+
 	loggingEnable, err := c.rds.GetParam("logging_collector")
 	if err != nil {
 		c.logger.Error("failed to check logging_collector parameter:", err)
