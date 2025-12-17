@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
@@ -30,12 +29,12 @@ func (p *CSVLogParser) Parse(ctx context.Context, f io.Reader, c chan<- *Event) 
 			break
 		}
 		if err != nil {
-			return err
+			continue
 		}
 
 		e, err := p.parseLine(line)
 		if err != nil {
-			return err
+			continue
 		}
 
 		match := statementRe.FindAllStringSubmatch(e.Message, -1)
@@ -69,43 +68,6 @@ func (p *CSVLogParser) Parse(ctx context.Context, f io.Reader, c chan<- *Event) 
 
 func (p *CSVLogParser) IsFileAcceptable(filename string) bool {
 	return strings.HasSuffix(filename, ".csv")
-}
-
-func (p *CSVLogParser) SplitLog(content []byte) ([]byte, []byte) {
-	for i := len(content) - 1; i >= 0; i-- {
-		if content[i] != '\n' || len(content)-i-1 < len(logTimeLayout) {
-			continue
-		}
-
-		_, err := time.Parse(logTimeLayout, string(content[i+1:i+1+len(logTimeLayout)]))
-		if err != nil {
-			continue
-		}
-
-		if i > 0 && content[i-1] == '"' {
-			return content[:i], content[i+1:]
-		}
-
-		commaIdx := i - 1
-		for ; commaIdx >= 0; commaIdx-- {
-			if content[commaIdx] == ',' {
-				break
-			}
-			if !unicode.IsDigit(rune(content[commaIdx])) && content[commaIdx] != '-' {
-				break
-			}
-		}
-		if commaIdx == -1 {
-			return nil, content
-		}
-		if commaIdx != ',' {
-			continue
-		}
-
-		return content[:i], content[i+1:]
-	}
-
-	return nil, content
 }
 
 func (p *CSVLogParser) parseLine(fields []string) (*LogEntry, error) {
