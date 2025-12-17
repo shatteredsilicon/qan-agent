@@ -195,8 +195,7 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 		if !recordExists || record == nil {
 			zeroMarker := rds.ZeroMarker
 			record = &rdsLogFileRecord{
-				previousData: []byte{},
-				marker:       &zeroMarker,
+				marker: &zeroMarker,
 			}
 		}
 		records[filename] = record
@@ -233,28 +232,16 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 
 				shouldBreak := dataOutput.AdditionalDataPending == nil || !(*dataOutput.AdditionalDataPending) || dataOutput.Marker == nil
 
-				data := bytes.NewBuffer(r.previousData)
-				if dataOutput.LogFileData != nil {
-					data.WriteString(*dataOutput.LogFileData)
-				}
-
-				var completeLog []byte
-				var incompleteLog []byte
-				if shouldBreak || data.Len() < 1024*1024 {
-					completeLog = data.Bytes()
-				} else {
-					completeLog, incompleteLog = p.SplitLog(data.Bytes())
-				}
-
-				if err := p.Parse(ctx, bytes.NewReader(completeLog), ch); err != nil {
-					c.logger.Error("failed to parse file", *f.LogFileName, ":", err)
-					return
+				if dataOutput.LogFileData != nil && len(*dataOutput.LogFileData) > 0 {
+					if err := p.Parse(ctx, bytes.NewReader([]byte(*dataOutput.LogFileData)), ch); err != nil {
+						c.logger.Error("failed to parse file", *f.LogFileName, ":", err)
+						return
+					}
 				}
 
 				if dataOutput.Marker != nil {
 					r.marker = dataOutput.Marker
 				}
-				r.previousData = incompleteLog
 
 				if shouldBreak {
 					break
@@ -365,6 +352,5 @@ func (c *RDSLogFileCollector) Messages() []proto.Message {
 }
 
 type rdsLogFileRecord struct {
-	marker       *string
-	previousData []byte
+	marker *string
 }
