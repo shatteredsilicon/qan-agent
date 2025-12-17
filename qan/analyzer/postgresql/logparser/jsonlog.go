@@ -32,7 +32,7 @@ func (p *JSONLogParser) Parse(ctx context.Context, f io.Reader, c chan<- *Event)
 	for reader.Scan() {
 		var e JSONLogEntry
 		if err := json.Unmarshal(reader.Bytes(), &e); err != nil {
-			return err
+			continue
 		}
 
 		match := statementRe.FindAllStringSubmatch(e.Message, -1)
@@ -74,17 +74,4 @@ func (p *JSONLogParser) Parse(ctx context.Context, f io.Reader, c chan<- *Event)
 
 func (p *JSONLogParser) IsFileAcceptable(filename string) bool {
 	return strings.HasSuffix(filename, ".json")
-}
-
-func (p *JSONLogParser) SplitLog(content []byte) ([]byte, []byte) {
-	for i := len(content) - 1; i >= 0; i-- {
-		if content[i] != '\n' {
-			if i == len(content)-1 {
-				return content[:i], nil
-			} else {
-				return content[:i], content[i+1:]
-			}
-		}
-	}
-	return nil, content
 }

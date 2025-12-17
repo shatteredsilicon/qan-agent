@@ -55,13 +55,16 @@ func NewRDSLogFileCollector(config config.QAN, logger *pct.Logger, spooler data.
 	}
 }
 
-func (c *RDSLogFileCollector) Prepare() error {
-	return c.setupRDS()
-}
+func (c *RDSLogFileCollector) Prepare() error { return nil }
 
 func (c *RDSLogFileCollector) Stop() {}
 
 func (c *RDSLogFileCollector) Start(ctx context.Context) {
+	if err := c.setupRDS(); err != nil {
+		c.logger.Error("failed to setup RDS service:", err)
+		return
+	}
+
 	loggingEnable, err := c.rds.GetParam("logging_collector")
 	if err != nil {
 		c.logger.Error("failed to check logging_collector parameter:", err)
@@ -195,8 +198,7 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 		if !recordExists || record == nil {
 			zeroMarker := rds.ZeroMarker
 			record = &rdsLogFileRecord{
-				previousData: []byte{},
-				marker:       &zeroMarker,
+				marker: &zeroMarker,
 			}
 		}
 		records[filename] = record
@@ -233,28 +235,16 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 
 				shouldBreak := dataOutput.AdditionalDataPending == nil || !(*dataOutput.AdditionalDataPending) || dataOutput.Marker == nil
 
-				data := bytes.NewBuffer(r.previousData)
-				if dataOutput.LogFileData != nil {
-					data.WriteString(*dataOutput.LogFileData)
-				}
-
-				var completeLog []byte
-				var incompleteLog []byte
-				if shouldBreak || data.Len() < 1024*1024 {
-					completeLog = data.Bytes()
-				} else {
-					completeLog, incompleteLog = p.SplitLog(data.Bytes())
-				}
-
-				if err := p.Parse(ctx, bytes.NewReader(completeLog), ch); err != nil {
-					c.logger.Error("failed to parse file", *f.LogFileName, ":", err)
-					return
+				if dataOutput.LogFileData != nil && len(*dataOutput.LogFileData) > 0 {
+					if err := p.Parse(ctx, bytes.NewReader([]byte(*dataOutput.LogFileData)), ch); err != nil {
+						c.logger.Error("failed to parse file", *f.LogFileName, ":", err)
+						return
+					}
 				}
 
 				if dataOutput.Marker != nil {
 					r.marker = dataOutput.Marker
 				}
-				r.previousData = incompleteLog
 
 				if shouldBreak {
 					break
@@ -365,6 +355,5 @@ func (c *RDSLogFileCollector) Messages() []proto.Message {
 }
 
 type rdsLogFileRecord struct {
-	marker       *string
-	previousData []byte
+	marker *string
 }
