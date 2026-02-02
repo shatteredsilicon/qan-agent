@@ -34,13 +34,8 @@ const (
 	MgoTimeoutSessionSocket = 5 * time.Second
 )
 
-func Explain(dsn, db, query string) (*proto.ExplainResult, error) {
-	// if dsn is incorrect we should exit immediately as this is not gonna correct itself
+func Explain(mongoOpts *options.ClientOptions, db, query string) (*proto.ExplainResult, error) {
 	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
-	mongoOpts := options.Client().ApplyURI(dsn)
-	if err := mongoOpts.Validate(); err != nil {
-		return nil, err
-	}
 	mongoOpts.SetServerAPIOptions(serverAPI).
 		SetConnectTimeout(MgoTimeoutDialInfo).
 		SetSocketTimeout(MgoTimeoutSessionSocket).
