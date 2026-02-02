@@ -19,12 +19,12 @@ package mongo
 
 import (
 	"encoding/json"
-	"net/url"
 
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/explain"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/summary"
 	"github.com/shatteredsilicon/ssm/proto"
+	"go.mongodb.org/mongo-driver/x/mongo/driver/connstring"
 )
 
 // verify, at compile time, if main struct implements plugin interface
@@ -78,13 +78,12 @@ func execSummary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
 // FixDSN adds default 'mongodb://' scheme to dsn
 // if it doesn't have a scheme
 func FixDSN(dsn string) string {
-	u, err := url.Parse(dsn)
-	if err != nil || u == nil || u.Scheme == "" {
+	if _, err := connstring.ParseAndValidate(dsn); err != nil {
 		// assume it's invalid because it doesn't have schema,
 		// add default schema 'mongodb://' and try it again
 		tmpDSN := "mongodb://" + dsn
-		u, err = url.Parse(tmpDSN)
-		if err == nil && u != nil && u.Scheme != "" {
+		_, err = connstring.ParseAndValidate(tmpDSN)
+		if err == nil {
 			dsn = tmpDSN
 		}
 	}
