@@ -204,7 +204,7 @@ func connectAndCollect(
 ) {
 	query := createQuery(dbName)
 	collection := client.Database(dbName).Collection("system.profile")
-	iterator, err := collection.Find(ctx, query, options.Find().SetSort(bson.D{{"$natural", 1}}), options.Find().SetCursorType(options.Tailable))
+	iterator, err := collection.Find(ctx, query, options.Find().SetSort(bson.D{{"$natural", 1}}), options.Find().SetCursorType(options.TailableAwait).SetMaxAwaitTime(time.Second))
 	if err != nil {
 		stats.IteratorErrCounter.Add(1)
 		stats.IteratorErrLast.Set(err.Error())

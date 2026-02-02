@@ -19,12 +19,13 @@ package mongo
 
 import (
 	"encoding/json"
-	"net/url"
 
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/explain"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/summary"
 	"github.com/shatteredsilicon/ssm/proto"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/x/mongo/driver/connstring"
 )
 
 // verify, at compile time, if main struct implements plugin interface
@@ -68,7 +69,12 @@ func execExplain(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
 		return nil, err
 	}
 
-	return explain.Explain(FixDSN(in.DSN), q.Db, q.Query)
+	mongoOpts, err := MongoClientOpts(FixDSN(in.DSN))
+	if err != nil {
+		return nil, err
+	}
+
+	return explain.Explain(mongoOpts, q.Db, q.Query)
 }
 
 func execSummary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
@@ -78,16 +84,30 @@ func execSummary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
 // FixDSN adds default 'mongodb://' scheme to dsn
 // if it doesn't have a scheme
 func FixDSN(dsn string) string {
-	u, err := url.Parse(dsn)
-	if err != nil || u == nil || u.Scheme == "" {
+	if _, err := connstring.ParseAndValidate(dsn); err != nil {
 		// assume it's invalid because it doesn't have schema,
 		// add default schema 'mongodb://' and try it again
 		tmpDSN := "mongodb://" + dsn
-		u, err = url.Parse(tmpDSN)
-		if err == nil && u != nil && u.Scheme != "" {
+		_, err = connstring.ParseAndValidate(tmpDSN)
+		if err == nil {
 			dsn = tmpDSN
 		}
 	}
 
 	return dsn
+}
+
+func MongoClientOpts(dsn string) (*options.ClientOptions, error) {
+	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
+	mongoOpts := options.Client().ApplyURI(dsn).SetServerAPIOptions(serverAPI)
+	if mongoOpts.Direct == nil {
+		// default to directConnection=true if it's not set
+		mongoOpts.SetDirect(true)
+	}
+
+	if err := mongoOpts.Validate(); err != nil {
+		return nil, err
+	}
+
+	return mongoOpts, nil
 }

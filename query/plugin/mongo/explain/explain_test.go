@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func TestExplain(t *testing.T) {
@@ -35,7 +36,7 @@ func TestExplain(t *testing.T) {
 	db := "test"
 	query := `{"ns":"test.col1","op":"query","query":{"find":"col1","filter":{"name":"Alicja"}}}`
 
-	explainResult, err := Explain(dsn, db, query)
+	explainResult, err := Explain(options.Client().ApplyURI(dsn), db, query)
 	require.NoError(t, err)
 
 	got := bson.M{}
@@ -60,7 +61,7 @@ func TestExplainDecodeQueryError(t *testing.T) {
 	db := "test"
 	query := `{Jas`
 
-	explainResult, err := Explain(dsn, db, query)
+	explainResult, err := Explain(options.Client().ApplyURI(dsn), db, query)
 	assert.Nil(t, explainResult)
 	assert.Error(t, err)
 	assert.Equal(t, "explain: unable to decode query {Jas: unexpected EOF", err.Error())

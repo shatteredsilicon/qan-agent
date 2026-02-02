@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/shatteredsilicon/ssm/proto"
-	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -74,9 +73,8 @@ func (m *MongoAnalyzer) Start() error {
 	dsn := mongo.FixDSN(m.protoInstance.DSN)
 
 	// if dsn is incorrect we should exit immediately as this is not gonna correct itself
-	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
-	mongoOpts := options.Client().ApplyURI(dsn).SetServerAPIOptions(serverAPI)
-	if err := mongoOpts.Validate(); err != nil {
+	mongoOpts, err := mongo.MongoClientOpts(dsn)
+	if err != nil {
 		return err
 	}
 
