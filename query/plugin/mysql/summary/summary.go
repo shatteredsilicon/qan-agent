@@ -18,11 +18,15 @@
 package summary
 
 import (
+	"fmt"
 	"net"
+	"strings"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct/cmd"
 )
+
+const hdrWidth = 72
 
 // Summary executes `pt-mysql-summary` for given dsn
 func Summary(dsn string) (string, error) {
@@ -42,6 +46,34 @@ func Summary(dsn string) (string, error) {
 	args = append(args, a...)
 
 	return cmd.NewRealCmd(name, args...).Run()
+}
+
+func ToolkitSummary(dsn string) (string, error) {
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return "", err
+	}
+
+	args := []string{}
+	args = append(args, authArgs(cfg.User, cfg.Passwd)...)
+	a, err := addrArgs(cfg.Net, cfg.Addr)
+	if err != nil {
+		return "", err
+	}
+	args = append(args, a...)
+
+	dkc := "pt-duplicate-key-checker"
+	dkcReply, err := cmd.NewRealCmd(dkc, args...).Run()
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf(
+		"# %s %s\n\n%s",
+		dkc,
+		strings.Repeat("#", hdrWidth-len(dkc)-1),
+		dkcReply,
+	), nil
 }
 
 // authArgs returns username and/or password arguments for cmd, e.g:
