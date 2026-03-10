@@ -43,10 +43,11 @@ func New() *MySQL {
 	m := &MySQL{}
 	m.connFactory = &mysql.RealConnectionFactory{}
 	m.cmds = map[string]execFunc{
-		"Explain":   m.explain,
-		"TableInfo": m.tableInfo,
-		"Summary":   m.summary,
-		"QueryInfo": m.queryInfo,
+		"Explain":        m.explain,
+		"TableInfo":      m.tableInfo,
+		"Summary":        m.summary,
+		"ToolkitSummary": m.toolkitSummary,
+		"QueryInfo":      m.queryInfo,
 	}
 
 	return m
@@ -115,4 +116,8 @@ func (m *MySQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error
 
 func (m *MySQL) summary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
 	return summary.Summary(in.DSN)
+}
+
+func (m *MySQL) toolkitSummary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
+	return summary.ToolkitSummary(in.DSN)
 }
