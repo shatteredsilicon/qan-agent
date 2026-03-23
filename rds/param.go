@@ -1,9 +1,13 @@
 package rds
 
-import "github.com/aws/aws-sdk-go/service/rds"
+import (
+	"slices"
+
+	"github.com/aws/aws-sdk-go/service/rds"
+)
 
 // GetParam returns value of a specific paramter in aws rds parameter group
-func (svc *Service) GetParam(name string) (*rds.Parameter, error) {
+func (svc *Service) GetParam(names ...string) (*rds.Parameter, error) {
 	instanceOutput, err := svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: &svc.instance,
 	})
@@ -37,7 +41,7 @@ func (svc *Service) GetParam(name string) (*rds.Parameter, error) {
 		}
 		for {
 			for _, param := range paramOutput.Parameters {
-				if param.ParameterName != nil && *param.ParameterName == name {
+				if param.ParameterName != nil && slices.Contains(names, *param.ParameterName) {
 					dbParam = param
 					break
 				}
@@ -96,7 +100,7 @@ func (svc *Service) GetParam(name string) (*rds.Parameter, error) {
 
 		for {
 			for _, param := range paramOutput.Parameters {
-				if param.ParameterName != nil && *param.ParameterName == name {
+				if param.ParameterName != nil && slices.Contains(names, *param.ParameterName) {
 					dbClusterParam = param
 					break
 				}
