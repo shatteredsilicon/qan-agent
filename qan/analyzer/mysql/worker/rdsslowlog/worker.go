@@ -272,7 +272,7 @@ func (w *Worker) Run() (*report.Result, error) {
 	}()
 
 	// check if slow query log is enabled
-	enabled, err := w.rds.GetParam("slow_query_log")
+	enabled, err := w.rds.GetParam("slow_query_log", "log_slow_query")
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +280,28 @@ func (w *Worker) Run() (*report.Result, error) {
 		return nil, ErrRDSSlowlogDisabled
 	}
 
-	slowLogFile, err := w.rds.GetParam("slow_query_log_file")
+	slowLogFileParamName := "slow_query_log_file"
+	slowLogFile, err := w.rds.GetParam(slowLogFileParamName)
+	if err == rds.ErrParamNotFound {
+		// In RDS MariaDB 10.11+, they removed this parameter and didn't provide an alternative parameter for it,
+		// even though there is a slow_query_log_file/log_slow_query_file variable in MariaDB. We have to setup
+		// a database connection and retrieve it from there, instead of doing it in the RDS way.
+		if err = w.mysqlConn.Connect(); err != nil {
+			return nil, err
+		}
+		defer w.mysqlConn.Close()
+
+		logFile, err := w.mysqlConn.GetGlobalVarString(slowLogFileParamName)
+		if err != nil {
+			return nil, err
+		}
+		if logFile.Valid {
+			slowLogFile = &awsRDS.Parameter{
+				ParameterName:  &slowLogFileParamName,
+				ParameterValue: &logFile.String,
+			}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +318,7 @@ func (w *Worker) Run() (*report.Result, error) {
 		return nil, ErrUnknownRDSLogOutput
 	}
 
-	longQueryTime, err := w.rds.GetParam("long_query_time")
+	longQueryTime, err := w.rds.GetParam("long_query_time", "log_slow_query_time")
 	if err != nil {
 		return nil, err
 	}
