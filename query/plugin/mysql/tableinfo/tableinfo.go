@@ -20,6 +20,7 @@ package tableinfo
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
@@ -79,7 +80,8 @@ func TableInfo(c mysql.Connector, tables *proto.TableInfoQuery) (proto.TableInfo
 				continue
 			}
 
-			tables := getTablesFromSelectStmt(cv.Select, 0)
+			tables, whereTables := getTableFromTableStmt(cv.Select, 0)
+			tables = append(tables, whereTables...)
 			for ti := range tables {
 				if tables[ti].Db == "" {
 					tables[ti].Db = t.Db
@@ -306,33 +308,47 @@ func showStatus(c mysql.Connector, db, table string) (*proto.ShowTableStatus, er
 	return &status, nil
 }
 
-func getTablesFromSelectStmt(ss sqlparser.SelectStatement, depth uint) (sTables []proto.Table) {
+func getTablesFromSelectStmt(ss sqlparser.SelectStatement, depth uint) (tables []proto.Table, whereTables []proto.Table) {
 	if depth > MAX_JOIN_DEPTH {
-		return nil
+		return nil, nil
 	}
 	depth++
 
 	switch t := ss.(type) {
 	case *sqlparser.Select:
-		sTables = append(sTables, getTablesFromTableExprs(sqlparser.TableExprs(t.From))...)
+		ts, wts := getTablesFromTableExprs(sqlparser.TableExprs(t.From))
+		tables = append(tables, ts...)
+		whereTables = append(whereTables, wts...)
+		if t.Where != nil {
+			whereTables = append(whereTables, getTablesFromExpr(t.Where.Expr, depth)...)
+		}
+		if t.Having != nil {
+			whereTables = append(whereTables, getTablesFromExpr(t.Having.Expr, depth)...)
+		}
 	case *sqlparser.Union:
-		sTables = append(sTables, getTablesFromSelectStmt(t.Left, depth)...)
-		sTables = append(sTables, getTablesFromSelectStmt(t.Right, depth)...)
+		lTables, lWhereTables := getTableFromTableStmt(t.Left, depth)
+		tables = append(tables, lTables...)
+		whereTables = append(whereTables, lWhereTables...)
+		rTables, rWhereTables := getTableFromTableStmt(t.Right, depth)
+		tables = append(tables, rTables...)
+		whereTables = append(whereTables, rWhereTables...)
 	}
 
-	return sTables
+	return tables, whereTables
 }
 
-func getTablesFromTableExprs(tes sqlparser.TableExprs) (tables []proto.Table) {
+func getTablesFromTableExprs(tes sqlparser.TableExprs) (tables []proto.Table, whereTables []proto.Table) {
 	for _, te := range tes {
-		tables = append(tables, getTablesFromTableExpr(te, 0)...)
+		ts, wts := getTablesFromTableExpr(te, 0)
+		tables = append(tables, ts...)
+		whereTables = append(whereTables, wts...)
 	}
-	return tables
+	return tables, whereTables
 }
 
-func getTablesFromTableExpr(te sqlparser.TableExpr, depth uint) (tables []proto.Table) {
+func getTablesFromTableExpr(te sqlparser.TableExpr, depth uint) (tables []proto.Table, whereTables []proto.Table) {
 	if depth > MAX_JOIN_DEPTH {
-		return nil
+		return nil, nil
 	}
 
 	depth++
@@ -351,7 +367,9 @@ func getTablesFromTableExpr(te sqlparser.TableExpr, depth uint) (tables []proto.
 				tables = append(tables, table)
 			}
 		case *sqlparser.DerivedTable:
-			tables = append(tables, getTablesFromSelectStmt(a.Expr.(*sqlparser.DerivedTable).Select, depth)...)
+			ts, wts := getTableFromTableStmt(a.Expr.(*sqlparser.DerivedTable).Select, depth)
+			tables = append(tables, ts...)
+			whereTables = append(whereTables, wts...)
 		}
 
 	case *sqlparser.JoinTableExpr:
@@ -373,11 +391,76 @@ func getTablesFromTableExpr(te sqlparser.TableExpr, depth uint) (tables []proto.
 		// MAX_JOIN_DEPTH is reached, we lose the whole tree because if we take
 		// the existing right-side tables, we'll generate a misleading partial
 		// list of tables, e.g. "SELECT b c".
-		tables = append(tables, getTablesFromTableExpr(a.LeftExpr, depth)...)
-		tables = append(tables, getTablesFromTableExpr(a.RightExpr, depth)...)
+		lTables, lWhereTables := getTablesFromTableExpr(a.LeftExpr, depth)
+		tables = append(tables, lTables...)
+		whereTables = append(whereTables, lWhereTables...)
+		rTables, rWhereTables := getTablesFromTableExpr(a.RightExpr, depth)
+		tables = append(tables, rTables...)
+		whereTables = append(whereTables, rWhereTables...)
 
 	case *sqlparser.ParenTableExpr:
-		tables = append(tables, getTablesFromTableExprs(a.Exprs)...)
+		ts, wts := getTablesFromTableExprs(a.Exprs)
+		tables = append(tables, ts...)
+		whereTables = append(whereTables, wts...)
+	}
+
+	return tables, whereTables
+}
+
+func getTableFromTableStmt(ts sqlparser.TableStatement, depth uint) (tables []proto.Table, whereTables []proto.Table) {
+	if depth > MAX_JOIN_DEPTH {
+		return nil, nil
+	}
+	depth++
+
+	switch t := ts.(type) {
+	case sqlparser.SelectStatement:
+		return getTablesFromSelectStmt(t, depth)
+	}
+
+	return tables, whereTables
+}
+
+func getTablesFromExpr(expr sqlparser.Expr, depth uint) (tables []proto.Table) {
+	if expr == nil || depth > MAX_JOIN_DEPTH {
+		return nil
+	}
+
+	depth++
+
+	exprValue := reflect.ValueOf(expr)
+	exprValues := []reflect.Value{}
+	if exprValue.Kind() == reflect.Slice {
+		for i := 0; i < exprValue.Len(); i++ {
+			exprValues = append(exprValues, exprValue.Index(i).Elem())
+		}
+	} else {
+		exprValues = append(exprValues, exprValue)
+	}
+	for _, exprValue := range exprValues {
+		exprValue = exprValue.Elem()
+		for i := 0; i < exprValue.NumField(); i++ {
+			v := exprValue.Field(i)
+			if v.Interface() == nil {
+				continue
+			}
+			if v.Type().Implements(reflect.TypeOf((*sqlparser.SelectStatement)(nil)).Elem()) {
+				ts, wts := getTablesFromSelectStmt(v.Interface().(sqlparser.SelectStatement), depth)
+				tables = append(tables, ts...)
+				tables = append(tables, wts...)
+				continue
+			}
+			if v.Type().Implements(reflect.TypeOf((*sqlparser.TableStatement)(nil)).Elem()) {
+				ts, wts := getTableFromTableStmt(v.Interface().(sqlparser.TableStatement), depth)
+				tables = append(tables, ts...)
+				tables = append(tables, wts...)
+				continue
+			}
+			if v.Type().Implements(reflect.TypeOf((*sqlparser.Expr)(nil)).Elem()) {
+				tables = append(tables, getTablesFromExpr(v.Interface().(sqlparser.Expr), depth)...)
+				continue
+			}
+		}
 	}
 
 	return tables
