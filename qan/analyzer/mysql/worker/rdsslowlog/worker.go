@@ -19,6 +19,7 @@ package rdsslowlog
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -27,11 +28,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	awsRDS "github.com/aws/aws-sdk-go/service/rds"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	awsRDS "github.com/aws/aws-sdk-go-v2/service/rds"
+	rdsTypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -208,27 +208,20 @@ func (w *Worker) setupRDS() error {
 		return err
 	}
 
-	var creds *credentials.Credentials
+	opts := [](func(*awsConfig.LoadOptions) error){awsConfig.WithRegion(rdsSvcDetail.Region)}
 	if rdsSvcDetail.AWSAccessKeyID != "" || rdsSvcDetail.AWSSecretAccessKey != "" {
-		creds = credentials.NewCredentials(&credentials.StaticProvider{
-			Value: credentials.Value{
-				AccessKeyID:     rdsSvcDetail.AWSAccessKeyID,
-				SecretAccessKey: rdsSvcDetail.AWSSecretAccessKey,
-			},
-		})
+		opts = append(opts, awsConfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(rdsSvcDetail.AWSAccessKeyID, rdsSvcDetail.AWSSecretAccessKey, ""),
+		))
 	}
-	awsConfig := &aws.Config{
-		CredentialsChainVerboseErrors: aws.Bool(true),
-		Credentials:                   creds,
-		Region:                        aws.String(rdsSvcDetail.Region),
-	}
-	s, err := session.NewSession(awsConfig)
+
+	cfg, err := awsConfig.LoadDefaultConfig(context.Background(), opts...)
 	if err != nil {
-		w.logger.Error(fmt.Sprintf("Error initializing aws session %s\n", err.Error()))
+		w.logger.Error(fmt.Sprintf("Error initializing aws config %s\n", err.Error()))
 		return err
 	}
 
-	w.rds = rds.NewService(awsRDS.New(s), rdsSvcDetail.Instance)
+	w.rds = rds.NewService(awsRDS.NewFromConfig(cfg), rdsSvcDetail.Instance)
 	return nil
 }
 
@@ -296,7 +289,7 @@ func (w *Worker) Run() (*report.Result, error) {
 			return nil, err
 		}
 		if logFile.Valid {
-			slowLogFile = &awsRDS.Parameter{
+			slowLogFile = &rdsTypes.Parameter{
 				ParameterName:  &slowLogFileParamName,
 				ParameterValue: &logFile.String,
 			}
@@ -435,7 +428,7 @@ func (w *Worker) cleanFileRecords(currentLogFile string) {
 // orderFiles sorts slow query log file by filename ASC, meaning from
 // the oldest to the latest, and it puts the current slow query log file
 // to the end of the slice that is going to be returned
-func (w *Worker) orderFiles(currentLogFile string, files []*awsRDS.DescribeDBLogFilesDetails) []*awsRDS.DescribeDBLogFilesDetails {
+func (w *Worker) orderFiles(currentLogFile string, files []rdsTypes.DescribeDBLogFilesDetails) []rdsTypes.DescribeDBLogFilesDetails {
 	sort.Sort(rds.ByFileName(files))
 	if len(files) > 1 && filepath.Base(*files[0].LogFileName) == currentLogFile {
 		files = append(files[1:], files[0])
@@ -527,7 +520,7 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 
 EVENT_LOOP:
 	for _, file := range files {
-		if file == nil {
+		if file.LogFileName == nil {
 			continue
 		}
 
@@ -566,13 +559,8 @@ EVENT_LOOP:
 			if err != nil {
 				w.logger.Error(fmt.Sprintf("downloading rds log file %s failed: %+v", *file.LogFileName, err))
 
-				awsErr, ok := err.(awserr.Error)
-				if !ok || w.ignoreRateLimit || w.hasRateLimitAlert() {
-					break
-				}
-
 				// check if it's a throttling error
-				messages := strings.ToLower(awsErr.Message())
+				messages := strings.ToLower(err.Error())
 				if !strings.Contains(messages, "rate exceed") && !strings.Contains(messages, "quota exceed") {
 					break
 				}
