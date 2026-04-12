@@ -3,7 +3,7 @@ package rds
 import (
 	"errors"
 
-	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
 )
 
 const (
@@ -37,15 +37,15 @@ type Service struct {
 }
 
 type service struct {
-	*rds.RDS
+	*rds.Client
 	instance string
 }
 
 // NewService returns a rds service
-func NewService(r *rds.RDS, instance string) *Service {
+func NewService(r *rds.Client, instance string) *Service {
 	return &Service{
 		service: &service{
-			RDS:      r,
+			Client:   r,
 			instance: instance,
 		},
 	}

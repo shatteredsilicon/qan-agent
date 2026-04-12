@@ -1,14 +1,16 @@
 package rds
 
 import (
+	"context"
 	"slices"
 
-	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
+	"github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
 // GetParam returns value of a specific paramter in aws rds parameter group
-func (svc *Service) GetParam(names ...string) (*rds.Parameter, error) {
-	instanceOutput, err := svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{
+func (svc *Service) GetParam(names ...string) (*types.Parameter, error) {
+	instanceOutput, err := svc.DescribeDBInstances(context.TODO(), &rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: &svc.instance,
 	})
 	if err != nil {
@@ -20,7 +22,7 @@ func (svc *Service) GetParam(names ...string) (*rds.Parameter, error) {
 
 	var paramGroup *string
 	for _, group := range instanceOutput.DBInstances[0].DBParameterGroups {
-		if group != nil && *group.ParameterApplyStatus == statusParamGroupApplied {
+		if group.ParameterApplyStatus != nil && *group.ParameterApplyStatus == statusParamGroupApplied {
 			paramGroup = group.DBParameterGroupName
 			break
 		}
@@ -31,9 +33,9 @@ func (svc *Service) GetParam(names ...string) (*rds.Parameter, error) {
 		return nil, ErrNoParamGroupApplied
 	}
 
-	var dbParam *rds.Parameter
+	var dbParam *types.Parameter
 	if paramGroup != nil {
-		paramOutput, err := svc.DescribeDBParameters(&rds.DescribeDBParametersInput{
+		paramOutput, err := svc.DescribeDBParameters(context.TODO(), &rds.DescribeDBParametersInput{
 			DBParameterGroupName: paramGroup,
 		})
 		if err != nil {
@@ -42,14 +44,14 @@ func (svc *Service) GetParam(names ...string) (*rds.Parameter, error) {
 		for {
 			for _, param := range paramOutput.Parameters {
 				if param.ParameterName != nil && slices.Contains(names, *param.ParameterName) {
-					dbParam = param
+					dbParam = &param
 					break
 				}
 			}
 			if dbParam != nil || paramOutput.Marker == nil || len(paramOutput.Parameters) == 0 {
 				break
 			}
-			paramOutput, err = svc.DescribeDBParameters(&rds.DescribeDBParametersInput{
+			paramOutput, err = svc.DescribeDBParameters(context.TODO(), &rds.DescribeDBParametersInput{
 				DBParameterGroupName: paramGroup,
 				Marker:               paramOutput.Marker,
 			})
@@ -59,10 +61,10 @@ func (svc *Service) GetParam(names ...string) (*rds.Parameter, error) {
 		}
 	}
 
-	var dbClusterParam *rds.Parameter
+	var dbClusterParam *types.Parameter
 	if dbClusterID != nil && (paramGroup == nil || dbParam == nil || *dbParam.Source != sourceUser) {
 		// check cluster parameter
-		clusterOutput, err := svc.DescribeDBClusters(&rds.DescribeDBClustersInput{
+		clusterOutput, err := svc.DescribeDBClusters(context.TODO(), &rds.DescribeDBClustersInput{
 			DBClusterIdentifier: dbClusterID,
 		})
 		if err != nil {
@@ -91,7 +93,7 @@ func (svc *Service) GetParam(names ...string) (*rds.Parameter, error) {
 			return nil, ErrNoClusterParamGroupApplied
 		}
 
-		paramOutput, err := svc.DescribeDBClusterParameters(&rds.DescribeDBClusterParametersInput{
+		paramOutput, err := svc.DescribeDBClusterParameters(context.TODO(), &rds.DescribeDBClusterParametersInput{
 			DBClusterParameterGroupName: clusterOutput.DBClusters[0].DBClusterParameterGroup,
 		})
 		if err != nil {
@@ -101,14 +103,14 @@ func (svc *Service) GetParam(names ...string) (*rds.Parameter, error) {
 		for {
 			for _, param := range paramOutput.Parameters {
 				if param.ParameterName != nil && slices.Contains(names, *param.ParameterName) {
-					dbClusterParam = param
+					dbClusterParam = &param
 					break
 				}
 			}
 			if dbClusterParam != nil || paramOutput.Marker == nil || len(paramOutput.Parameters) == 0 {
 				break
 			}
-			paramOutput, err = svc.DescribeDBClusterParameters(&rds.DescribeDBClusterParametersInput{
+			paramOutput, err = svc.DescribeDBClusterParameters(context.TODO(), &rds.DescribeDBClusterParametersInput{
 				DBClusterParameterGroupName: clusterOutput.DBClusters[0].DBClusterParameterGroup,
 				Marker:                      paramOutput.Marker,
 			})

@@ -11,11 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	awsRDS "github.com/aws/aws-sdk-go/service/rds"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	awsRDS "github.com/aws/aws-sdk-go-v2/service/rds"
+	rdsTypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/data"
@@ -28,7 +27,6 @@ import (
 )
 
 const (
-	longQueryTimeMultiple          = 2
 	rateLmitMaximumTimes           = 2
 	minimumLogMinDurationStatement = 1
 	defaultThrottlingRetention     = 7 * 24 * time.Hour // 7 days
@@ -205,7 +203,7 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 
 		logRoutineChan <- struct{}{}
 		wg.Add(1)
-		go func(ctx context.Context, f *awsRDS.DescribeDBLogFilesDetails, r *rdsLogFileRecord, p logparser.LogParser, ch chan *logparser.Event) {
+		go func(ctx context.Context, f rdsTypes.DescribeDBLogFilesDetails, r *rdsLogFileRecord, p logparser.LogParser, ch chan *logparser.Event) {
 			defer func() {
 				<-logRoutineChan
 				wg.Done()
@@ -217,15 +215,10 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 				if err != nil {
 					c.logger.Error(fmt.Sprintf("downloading rds log file %s failed: %+v", *file.LogFileName, err))
 
-					awsErr, ok := err.(awserr.Error)
-					if !ok || c.ignoreRateLimit || c.hasRateLimitAlert() {
-						return
-					}
-
 					// check if it's a throttling error
-					messages := strings.ToLower(awsErr.Message())
+					messages := strings.ToLower(err.Error())
 					if !strings.Contains(messages, "rate exceed") && !strings.Contains(messages, "quota exceed") {
-						return
+						break
 					}
 
 					now := time.Now().UTC()
@@ -273,27 +266,20 @@ func (c *RDSLogFileCollector) setupRDS() error {
 		return err
 	}
 
-	var creds *credentials.Credentials
+	opts := [](func(*awsConfig.LoadOptions) error){awsConfig.WithRegion(rdsSvcDetail.Region)}
 	if rdsSvcDetail.AWSAccessKeyID != "" || rdsSvcDetail.AWSSecretAccessKey != "" {
-		creds = credentials.NewCredentials(&credentials.StaticProvider{
-			Value: credentials.Value{
-				AccessKeyID:     rdsSvcDetail.AWSAccessKeyID,
-				SecretAccessKey: rdsSvcDetail.AWSSecretAccessKey,
-			},
-		})
+		opts = append(opts, awsConfig.WithCredentialsProvider(
+			credentials.NewStaticCredentialsProvider(rdsSvcDetail.AWSAccessKeyID, rdsSvcDetail.AWSSecretAccessKey, ""),
+		))
 	}
-	awsConfig := &aws.Config{
-		CredentialsChainVerboseErrors: aws.Bool(true),
-		Credentials:                   creds,
-		Region:                        aws.String(rdsSvcDetail.Region),
-	}
-	s, err := session.NewSession(awsConfig)
+
+	cfg, err := awsConfig.LoadDefaultConfig(context.Background(), opts...)
 	if err != nil {
-		c.logger.Error(fmt.Sprintf("Error initializing aws session %s\n", err.Error()))
+		c.logger.Error(fmt.Sprintf("Error initializing aws config %s\n", err.Error()))
 		return err
 	}
 
-	c.rds = rds.NewService(awsRDS.New(s), rdsSvcDetail.Instance)
+	c.rds = rds.NewService(awsRDS.NewFromConfig(cfg), rdsSvcDetail.Instance)
 	return nil
 }
 
