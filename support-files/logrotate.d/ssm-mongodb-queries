@@ -1,4 +1,0 @@
-/var/log/ssm-mongodb-queries.log {
-    rotate 30
-    daily
-}
