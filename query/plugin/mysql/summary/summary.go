@@ -45,6 +45,12 @@ func Summary(dsn string) (string, error) {
 	}
 	args = append(args, a...)
 
+	// try --ssl option
+	sslArgs := append(append([]string{}, args...), "--", "--ssl")
+	if reply, err := cmd.NewRealCmd(name, sslArgs...).Run(); err == nil {
+		return reply, err
+	}
+
 	return cmd.NewRealCmd(name, args...).Run()
 }
 
@@ -63,9 +69,16 @@ func ToolkitSummary(dsn string) (string, error) {
 	args = append(args, a...)
 
 	dkc := "pt-duplicate-key-checker"
+
+	// try SSL connection
+	sslArgs := append(append([]string{}, args...), "s=true")
+	if reply, err := cmd.NewRealCmd(dkc, sslArgs...).Run(); err == nil {
+		return reply, err
+	}
+
 	dkcReply, err := cmd.NewRealCmd(dkc, args...).Run()
 	if err != nil {
-		return "", err
+		return dkcReply, err
 	}
 
 	return fmt.Sprintf(
