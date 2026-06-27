@@ -149,7 +149,7 @@ type Class struct {
 type Snapshot map[string]Class // keyed on digest (classId)
 
 type WorkerFactory interface {
-	Make(name string, mysqlConn mysql.Connector, cfg analyzer.QAN) *Worker
+	Make(name string, cfg analyzer.QAN) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -169,16 +169,16 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, mysqlConn mysql.Connector, cfg analyzer.QAN) *Worker {
-	getRows := func(c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error {
+func (f *RealWorkerFactory) Make(name string, cfg analyzer.QAN) *Worker {
+	getRows := func(mysqlConn mysql.Connector, c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error {
 		return GetDigestRows(mysqlConn, lastFetchSeconds, c, doneChan, cfg)
 	}
 
-	getPreStmtRows := func(c chan<- *DigestRow, doneChan chan<- error) error {
+	getPreStmtRows := func(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error) error {
 		return GetPreStmtRows(mysqlConn, c, doneChan, cfg)
 	}
 
-	return NewWorker(pct.NewLogger(f.logChan, name), mysqlConn, getRows, getPreStmtRows)
+	return NewWorker(pct.NewLogger(f.logChan, name), getRows, getPreStmtRows)
 }
 
 // GetDigestRows connects to MySQL through `mysql.Connector`,
@@ -395,12 +395,11 @@ SELECT
 	return nil
 }
 
-type GetDigestRowsFunc func(c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error
-type GetPreStmtRowsFunc func(c chan<- *DigestRow, doneChan chan<- error) error
+type GetDigestRowsFunc func(mysqlConn mysql.Connector, c chan<- *DigestRow, lastFetchSeconds float64, doneChan chan<- error) error
+type GetPreStmtRowsFunc func(mysqlConn mysql.Connector, c chan<- *DigestRow, doneChan chan<- error) error
 
 type Worker struct {
 	logger         *pct.Logger
-	mysqlConn      mysql.Connector
 	getRows        GetDigestRowsFunc
 	getPreStmtRows GetPreStmtRowsFunc
 	// --
@@ -421,11 +420,10 @@ type Worker struct {
 	queryExamples         map[string]perfSchemaExample
 }
 
-func NewWorker(logger *pct.Logger, mysqlConn mysql.Connector, getRows GetDigestRowsFunc, getPreStmtRows GetPreStmtRowsFunc) *Worker {
+func NewWorker(logger *pct.Logger, getRows GetDigestRowsFunc, getPreStmtRows GetPreStmtRowsFunc) *Worker {
 	name := logger.Service()
 	w := &Worker{
 		logger:         logger,
-		mysqlConn:      mysqlConn,
 		getRows:        getRows,
 		getPreStmtRows: getPreStmtRows,
 		// --
@@ -441,7 +439,7 @@ func NewWorker(logger *pct.Logger, mysqlConn mysql.Connector, getRows GetDigestR
 	return w
 }
 
-func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) error {
+func (w *Worker) Setup(_ mysql.Connector, interval *iter.Interval, resultChan chan *report.Result) error {
 	if w.iter != nil {
 		// Ensure intervals are in sequence, else reset.
 		if interval.Number != w.iter.Number+1 {
@@ -459,22 +457,14 @@ func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) 
 	return nil
 }
 
-func (w *Worker) Run() (*report.Result, error) {
+func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
 	w.logger.Debug("Run:call:", w.iter.Number)
 	defer w.logger.Debug("Run:return:", w.iter.Number)
 
 	defer w.status.Update(w.name, "Idle")
 
-	w.status.Update(w.name, "Connecting to MySQL")
-	if err := w.mysqlConn.Connect(); err != nil {
-		w.logger.Warn(err.Error())
-		w.lastErr = err
-		return nil, nil // not an error to caller
-	}
-	defer w.mysqlConn.Close()
-
 	var err error
-	w.digests.Curr, w.digests.PreStmtCurr, err = w.getSnapshot()
+	w.digests.Curr, w.digests.PreStmtCurr, err = w.getSnapshot(mysqlConn)
 	if err != nil {
 		w.lastErr = err
 		return nil, err
@@ -527,13 +517,13 @@ func (w *Worker) Status() map[string]string {
 	return w.status.All()
 }
 
-func (w *Worker) SetConfig(config analyzer.QAN) {
+func (w *Worker) SetConfig(mysqlConn mysql.Connector, config analyzer.QAN) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	w.collectExamples = *config.ExampleQueries
 	if w.collectExamples && w.collectExamplesTicker == nil {
 		w.collectExamplesTicker = time.NewTicker(time.Millisecond * 1000)
-		go w.getQueryExamples(w.collectExamplesTicker.C)
+		go w.getQueryExamples(mysqlConn, w.collectExamplesTicker.C)
 	}
 }
 
@@ -548,7 +538,7 @@ func (w *Worker) reset() {
 	w.lastPrepTime = 0
 }
 
-func (w *Worker) getQueryExamples(ticker <-chan time.Time) {
+func (w *Worker) getQueryExamples(mysqlConn mysql.Connector, ticker <-chan time.Time) {
 	isRunning := false
 	for range ticker {
 		if isRunning {
@@ -556,13 +546,13 @@ func (w *Worker) getQueryExamples(ticker <-chan time.Time) {
 		}
 		w.isRunning = true
 
-		err := w.mysqlConn.Connect()
+		err := mysqlConn.Connect()
 		if err != nil {
 			continue
 		}
 
 		query := "SELECT DIGEST, CURRENT_SCHEMA, SQL_TEXT FROM performance_schema.events_statements_history"
-		rows, err := w.mysqlConn.DB().Query(query)
+		rows, err := mysqlConn.DB().Query(query)
 		if err != nil {
 			return
 		}
@@ -588,7 +578,7 @@ func (w *Worker) getQueryExamples(ticker <-chan time.Time) {
 	}
 }
 
-func (w *Worker) getSnapshot() (Snapshot, Snapshot, error) {
+func (w *Worker) getSnapshot(mysqlConn mysql.Connector) (Snapshot, Snapshot, error) {
 	w.logger.Debug("getSnapshot:call:", w.iter.Number)
 	defer w.logger.Debug("getSnapshot:return:", w.iter.Number)
 
@@ -611,7 +601,7 @@ func (w *Worker) getSnapshot() (Snapshot, Snapshot, error) {
 	doneChan := make(chan error, 1)
 	checksForDone := 0
 
-	if err := w.getRows(rowChan, seconds, doneChan); err == nil {
+	if err := w.getRows(mysqlConn, rowChan, seconds, doneChan); err == nil {
 		checksForDone += 1
 	} else if err != sql.ErrNoRows {
 		return Snapshot{}, Snapshot{}, err
@@ -619,7 +609,7 @@ func (w *Worker) getSnapshot() (Snapshot, Snapshot, error) {
 
 	preparedRowChan := make(chan *DigestRow)
 	if w.getPreStmtRows != nil {
-		if err := w.getPreStmtRows(preparedRowChan, doneChan); err == nil {
+		if err := w.getPreStmtRows(mysqlConn, preparedRowChan, doneChan); err == nil {
 			checksForDone += 1
 		} else if errCode, ok := err.(*mysqlDriver.MySQLError); ok && errCode.Number == 1146 {
 			// if it's a table not exists error, just ignore it

@@ -424,7 +424,7 @@ func (p *SlowLogParser) parseExplain(line string) {
 	if !p.inExplain { // first line, parse it as the column headers
 		p.inExplain = true
 		p.explaiinColumns = strs
-		p.event.ExplainRows = make([]proto.ExplainRow, 0)
+		p.event.ExplainRows = make([]*proto.ExplainRow, 0)
 		return
 	}
 
@@ -465,7 +465,7 @@ func (p *SlowLogParser) parseExplain(line string) {
 			}
 		}
 	}
-	p.event.ExplainRows = append(p.event.ExplainRows, row)
+	p.event.ExplainRows = append(p.event.ExplainRows, &row)
 }
 
 func (p *SlowLogParser) sendEvent(inHeader bool, inQuery bool) {

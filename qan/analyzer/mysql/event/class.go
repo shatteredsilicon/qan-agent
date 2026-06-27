@@ -31,9 +31,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package event
 
 import (
-	"encoding/json"
-
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
+	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
@@ -47,7 +46,8 @@ const (
 
 type Class struct {
 	*qan.Class
-	Metrics *Metrics
+	Metrics     *Metrics
+	ExplainRows []*proto.ExplainRow
 }
 
 // NewClass returns a new Class for the class ID and fingerprint.
@@ -99,10 +99,7 @@ func (c *Class) AddEvent(e *log.Event, outlier bool) {
 				} else {
 					c.Example.Query = e.Query
 				}
-				if len(e.ExplainRows) > 0 {
-					explainBytes, _ := json.Marshal(e.ExplainRows)
-					c.Example.Explain = string(explainBytes)
-				}
+				c.ExplainRows = e.ExplainRows
 				if !e.Ts.IsZero() && e.Ts.Unix() > 0 {
 					// todo use time.RFC3339Nano instead
 					c.Example.Ts = e.Ts.UTC().Format("2006-01-02 15:04:05")

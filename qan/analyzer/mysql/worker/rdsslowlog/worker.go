@@ -40,9 +40,10 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
+	mysqlUtil "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/rds"
+	"github.com/shatteredsilicon/qan-agent/util"
 	"github.com/shatteredsilicon/ssm/proto"
 	"go4.org/sort"
 )
@@ -124,10 +125,9 @@ func (f byFileName) Less(i, j int) bool {
 }
 
 type Worker struct {
-	logger    *pct.Logger
-	config    analyzer.QAN
-	mysqlConn mysql.Connector
-	rds       *rds.Service
+	logger *pct.Logger
+	config analyzer.QAN
+	rds    *rds.Service
 	// --
 	ZeroRunTime bool // testing
 	// --
@@ -175,9 +175,8 @@ func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connecto
 		logger.Error(err.Error())
 	}
 	w := &Worker{
-		logger:    logger,
-		config:    config,
-		mysqlConn: mysqlConn,
+		logger: logger,
+		config: config,
 		// --
 		name:            name,
 		status:          pct.NewStatus([]string{name}),
@@ -225,7 +224,7 @@ func (w *Worker) setupRDS() error {
 	return nil
 }
 
-func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) error {
+func (w *Worker) Setup(_ mysql.Connector, interval *iter.Interval, resultChan chan *report.Result) error {
 	w.logger.Debug("Setup:call")
 	defer w.logger.Debug("Setup:return")
 	w.logger.Debug("Setup:", interval)
@@ -239,8 +238,8 @@ func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) 
 	w.job = &Job{
 		ID:             fmt.Sprintf("%d", interval.Number),
 		RunTime:        workerRunTime,
-		ExampleQueries: boolValue(w.config.ExampleQueries),
-		RetainSlowLogs: intValue(w.config.RetainSlowLogs),
+		ExampleQueries: util.ValueOf(w.config.ExampleQueries),
+		RetainSlowLogs: util.ValueOf(w.config.RetainSlowLogs),
 	}
 
 	w.logger.Debug("Setup:", w.job)
@@ -248,7 +247,7 @@ func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) 
 	return nil
 }
 
-func (w *Worker) Run() (*report.Result, error) {
+func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
 	w.logger.Debug("Run:call")
 	defer w.logger.Debug("Run:return")
 
@@ -279,12 +278,7 @@ func (w *Worker) Run() (*report.Result, error) {
 		// In RDS MariaDB 10.11+, they removed this parameter and didn't provide an alternative parameter for it,
 		// even though there is a slow_query_log_file/log_slow_query_file variable in MariaDB. We have to setup
 		// a database connection and retrieve it from there, instead of doing it in the RDS way.
-		if err = w.mysqlConn.Connect(); err != nil {
-			return nil, err
-		}
-		defer w.mysqlConn.Close()
-
-		logFile, err := w.mysqlConn.GetGlobalVarString(slowLogFileParamName)
+		logFile, err := mysqlConn.GetGlobalVarString(slowLogFileParamName)
 		if err != nil {
 			return nil, err
 		}
@@ -365,7 +359,7 @@ func (w *Worker) Status() map[string]string {
 	return w.status.All()
 }
 
-func (w *Worker) SetConfig(config analyzer.QAN) {
+func (w *Worker) SetConfig(_ mysql.Connector, config analyzer.QAN) {
 	w.config = config
 }
 
@@ -578,7 +572,7 @@ EVENT_LOOP:
 				data.WriteString(*dataOutput.LogFileData)
 			}
 
-			completeLog, incompleteLog := util.SplitSlowLog(data.Bytes())
+			completeLog, incompleteLog := mysqlUtil.SplitSlowLog(data.Bytes())
 			// Test the incomplete log see if it can be parsed
 			p := w.MakeLogParser([]byte(incompleteLog), logParserOpts)
 			go func() {
@@ -787,22 +781,4 @@ func (w Worker) throttlingStateExpired() bool {
 	}
 
 	return time.Now().UTC().Sub(w.rateLimitTimestamps[0]) >= throttlingRetention
-}
-
-// boolValue returns the value of the bool pointer passed in or
-// false if the pointer is nil.
-func boolValue(v *bool) bool {
-	if v != nil {
-		return *v
-	}
-	return false
-}
-
-// intValue returns the value of the int pointer passed in or
-// 0 if the pointer is nil.
-func intValue(v *int) int {
-	if v != nil {
-		return *v
-	}
-	return 0
 }

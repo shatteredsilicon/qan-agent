@@ -12,13 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
 
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
 )
 
 func TestNew(t *testing.T) {
 	docsChan := make(chan pm.SystemProfile)
-	pcQan := pc.QAN{
-		Interval: 60,
+	pcQan := analyzer.QAN{
+		QAN: pc.QAN{
+			Interval: 60,
+		},
 	}
 	a := aggregator.New(time.Now(), pcQan)
 
@@ -52,8 +55,10 @@ func TestNew(t *testing.T) {
 func TestParser_StartStop(t *testing.T) {
 	var err error
 	docsChan := make(chan pm.SystemProfile)
-	pcQan := pc.QAN{
-		Interval: 60,
+	pcQan := analyzer.QAN{
+		QAN: pc.QAN{
+			Interval: 60,
+		},
 	}
 	a := aggregator.New(time.Now(), pcQan)
 
@@ -72,8 +77,10 @@ func TestParser_StartStop(t *testing.T) {
 
 func TestParser_running(t *testing.T) {
 	docsChan := make(chan pm.SystemProfile)
-	pcQan := pc.QAN{
-		Interval: 1,
+	pcQan := analyzer.QAN{
+		QAN: pc.QAN{
+			Interval: 1,
+		},
 	}
 	a := aggregator.New(time.Now(), pcQan)
 	reportChan := a.Start()

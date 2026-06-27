@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/shatteredsilicon/ssm/proto"
-	"github.com/shatteredsilicon/ssm/proto/config"
+	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,6 +14,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/test/mock"
 	"github.com/shatteredsilicon/qan-agent/test/profiling"
 )
@@ -36,10 +37,12 @@ func TestCollectingAndSendingData(t *testing.T) {
 	spool := mock.NewSpooler(dataChan)
 	// Create the QAN config.
 	exampleQueries := true
-	qanConfig := config.QAN{
-		UUID:           "12345678",
-		Interval:       5, // seconds
-		ExampleQueries: &exampleQueries,
+	qanConfig := analyzer.QAN{
+		QAN: pc.QAN{
+			UUID:           "12345678",
+			Interval:       5, // seconds
+			ExampleQueries: &exampleQueries,
+		},
 	}
 	plugin := New(mongoOpts, logger, spool, qanConfig)
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
@@ -20,9 +21,11 @@ func TestAggregator_Add(t *testing.T) {
 	timeEnd, err := time.Parse("2006-01-02 15:04:05", "2017-07-02 07:56:00")
 	require.NoError(t, err)
 
-	config := pc.QAN{
-		UUID:     "abc",
-		Interval: 60, // 60s
+	config := analyzer.QAN{
+		QAN: pc.QAN{
+			UUID:     "abc",
+			Interval: 60, // 60s
+		},
 	}
 
 	aggregator := New(timeStart, config)
@@ -161,9 +164,11 @@ func TestAggregator_Add_EmptyInterval(t *testing.T) {
 	timeEnd, err := time.Parse("2006-01-02 15:04:05", "2017-07-02 07:56:00")
 	require.NoError(t, err)
 
-	config := pc.QAN{
-		UUID:     "abc",
-		Interval: 60, // 60s
+	config := analyzer.QAN{
+		QAN: pc.QAN{
+			UUID:     "abc",
+			Interval: 60, // 60s
+		},
 	}
 
 	aggregator := New(timeStart, config)
@@ -187,9 +192,11 @@ func TestAggregator_Add_EmptyInterval(t *testing.T) {
 
 func TestAggregator_StartStop(t *testing.T) {
 	var err error
-	config := pc.QAN{
-		UUID:     "abc",
-		Interval: 60, // 60s
+	config := analyzer.QAN{
+		QAN: pc.QAN{
+			UUID:     "abc",
+			Interval: 60, // 60s
+		},
 	}
 
 	timeStart, err := time.Parse("2006-01-02 15:04:05", "2017-07-02 07:55:00")

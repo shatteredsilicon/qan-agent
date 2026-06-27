@@ -113,13 +113,13 @@ func (s *WorkerTestSuite) RunWorker(config analyzer.QAN, mysqlConn mysql.Connect
 	w := NewWorker(s.logger, config, mysqlConn, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}))
 	w.ZeroRunTime = true
 	resultChan := make(chan *report.Result)
-	w.Setup(i, resultChan)
+	w.Setup(mysqlConn, i, resultChan)
 	go func() {
 		for range resultChan {
 		}
 	}()
 	defer close(resultChan)
-	err, res := w.Run()
+	err, res := w.Run(mysqlConn)
 	w.Cleanup()
 	return err, res
 }
@@ -330,7 +330,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 	}
 	// Rotation happens in Setup(), but the log isn't rotated yet.
 	resultChan := make(chan *report.Result)
-	w.Setup(i1, resultChan)
+	w.Setup(s.nullmysql, i1, resultChan)
 	go func() {
 		for range resultChan {
 		}
@@ -338,7 +338,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 	gotSet := s.nullmysql.GetExec()
 	t.Check(gotSet, HasLen, 0)
 
-	res, err := w.Run()
+	res, err := w.Run(s.nullmysql)
 	close(resultChan)
 	t.Assert(err, IsNil)
 
@@ -355,7 +355,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 		StopTime:    now,
 	}
 	resultChan = make(chan *report.Result)
-	w.Setup(i2, resultChan)
+	w.Setup(s.nullmysql, i2, resultChan)
 	go func() {
 		for range resultChan {
 		}
@@ -369,7 +369,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 	// When rotated, the interval end offset is extended to end of file.
 	t.Check(i2.EndOffset, Equals, int64(2200))
 
-	res, err = w.Run()
+	res, err = w.Run(s.nullmysql)
 	t.Assert(err, IsNil)
 
 	// The old slow log is removed in Cleanup(), so it should still exist.
@@ -446,7 +446,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 	}
 	// Rotation happens in Setup(), but the log isn't rotated yet.
 	resultChan := make(chan *report.Result)
-	w.Setup(i1, resultChan)
+	w.Setup(s.nullmysql, i1, resultChan)
 	go func() {
 		for range resultChan {
 		}
@@ -454,7 +454,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 	gotSet := s.nullmysql.GetExec()
 	t.Check(gotSet, HasLen, 0)
 
-	res, err := w.Run()
+	res, err := w.Run(s.nullmysql)
 	close(resultChan)
 	t.Assert(err, IsNil)
 
@@ -471,7 +471,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 		StopTime:    now,
 	}
 	resultChan = make(chan *report.Result)
-	w.Setup(i2, resultChan)
+	w.Setup(s.nullmysql, i2, resultChan)
 	go func() {
 		for range resultChan {
 		}
@@ -485,7 +485,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 	// When rotated, the interval end offset is extended to end of file.
 	t.Check(i2.EndOffset, Equals, int64(2200))
 
-	res, err = w.Run()
+	res, err = w.Run(s.nullmysql)
 	t.Assert(err, IsNil)
 
 	// The old slow log is removed in Cleanup(), so it should still exist.
@@ -612,13 +612,13 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 	}
 	// Rotation happens in Setup(), but the log isn't rotated yet.
 	resultChan := make(chan *report.Result)
-	w.Setup(i1, resultChan)
+	w.Setup(conn, i1, resultChan)
 	go func() {
 		for range resultChan {
 		}
 	}()
 
-	res, err := w.Run()
+	res, err := w.Run(conn)
 	close(resultChan)
 	t.Assert(err, IsNil)
 
@@ -635,7 +635,7 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 		StopTime:    now,
 	}
 	resultChan = make(chan *report.Result)
-	w.Setup(i2, resultChan)
+	w.Setup(conn, i2, resultChan)
 	go func() {
 		for range resultChan {
 		}
@@ -645,7 +645,7 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 	// When rotated, the interval end offset is extended to end of file.
 	t.Check(i2.EndOffset, Equals, int64(2200))
 
-	res, err = w.Run()
+	res, err = w.Run(conn)
 	t.Assert(err, IsNil)
 
 	// The old slow log is removed in Cleanup(), so it should still exist.
@@ -700,7 +700,7 @@ func (s *WorkerTestSuite) TestStop(t *C) {
 		EndOffset:   100000,
 	}
 	resultChan := make(chan *report.Result)
-	w.Setup(i, resultChan)
+	w.Setup(s.nullmysql, i, resultChan)
 	go func() {
 		for range resultChan {
 		}
@@ -712,7 +712,7 @@ func (s *WorkerTestSuite) TestStop(t *C) {
 	var res *report.Result
 	var err error
 	go func() {
-		res, err = w.Run() // calls p.Start()
+		res, err = w.Run(s.nullmysql) // calls p.Start()
 		doneChan <- true
 	}()
 
@@ -785,13 +785,13 @@ func (s *WorkerTestSuite) TestResult014(t *C) {
 	}
 
 	resultChan := make(chan *report.Result)
-	w.Setup(i, resultChan)
+	w.Setup(mock.NewNullMySQL(), i, resultChan)
 	go func() {
 		for range resultChan {
 		}
 	}()
 	defer close(resultChan)
-	result, err := w.Run()
+	result, err := w.Run(mock.NewNullMySQL())
 	t.Assert(err, IsNil)
 	w.Cleanup()
 
@@ -804,7 +804,7 @@ func (s *WorkerTestSuite) TestResult014(t *C) {
 		StartOffset: 0,
 		EndOffset:   127118680,
 	}
-	report := report.MakeReport(config.QAN, interval.StartTime, interval.StopTime, interval, result, nil)
+	report := report.MakeReport(config, interval.StartTime, interval.StopTime, interval, result, nil, nil)
 
 	t.Check(report.Global.TotalQueries, Equals, uint(4))
 	t.Check(report.Global.UniqueQueries, Equals, uint(4))

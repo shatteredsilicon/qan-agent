@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
@@ -53,7 +53,14 @@ func (a ByQueryTime) Less(i, j int) bool {
 	return a[i].Metrics.TimeMetrics["Query_time"].Sum > a[j].Metrics.TimeMetrics["Query_time"].Sum
 }
 
-func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Interval, result *Result, logger *pct.Logger) *qan.Report {
+func MakeReport(
+	config analyzer.QAN,
+	startTime, endTime time.Time,
+	interval *iter.Interval,
+	result *Result,
+	logger *pct.Logger,
+	prefetchMetadataHandler func(*event.Class) error,
+) *qan.Report {
 	// Sort classes by Query_time_sum, descending.
 	sort.Sort(ByQueryTime(result.Class))
 
@@ -66,13 +73,38 @@ func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Inte
 		Global:  result.Global.Class,
 		Class:   make([]*qan.Class, len(result.Class)),
 	}
-	for i := range result.Class {
-		report.Class[i] = result.Class[i].Class
-		if logger != nil && report.Class[i] != nil && report.Class[i].Fingerprint != "" && report.Class[i].Example != nil && report.Class[i].Example.Query == "" {
-			classBytes, _ := json.Marshal(*report.Class[i])
+
+	processedI := 0
+	for ; processedI < len(result.Class) && (config.ReportLimit == 0 || processedI < int(config.ReportLimit)); processedI++ {
+		if err := prefetchMetadataHandler(result.Class[processedI]); err != nil {
+			logger.Error("got an error when prefetching metadata:", err)
+		}
+
+		report.Class[processedI] = result.Class[processedI].Class
+		if logger != nil && report.Class[processedI] != nil && report.Class[processedI].Fingerprint != "" && report.Class[processedI].Example != nil && report.Class[processedI].Example.Query == "" {
+			classBytes, _ := json.Marshal(*report.Class[processedI])
 			logger.Debug("MakeReport got an non-empty fingerprint and empty query example class: %s", string(classBytes))
 		}
 	}
+	report.Class = report.Class[:processedI]
+
+	if config.ReportLimit > 0 && processedI >= int(config.ReportLimit) && len(result.Class) > processedI { // LRQ
+		// Low-ranking Queries
+		lrq := event.NewClass("lrq", "/* low-ranking queries */", false)
+
+		// Set timestamps of lrq query class to a proper 'zero' time,
+		// so it fits database's NO_ZERO_DATE restriction or
+		// something like that.
+		lrq.StartAt = time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC)
+		lrq.EndAt = time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC)
+		lrq.Example.Ts = lrq.StartAt.UTC().Format(time.DateTime)
+
+		for _, class := range result.Class[processedI:] {
+			lrq.AddClass(class)
+		}
+		report.Class = append(report.Class, lrq.Class)
+	}
+
 	if interval != nil {
 		size, err := pct.FileSize(interval.Filename)
 		if err != nil {
@@ -88,67 +120,5 @@ func MakeReport(config pc.QAN, startTime, endTime time.Time, interval *iter.Inte
 		report.RateLimit = result.RateLimit
 	}
 
-	// Return all query classes if there's no limit or number of classes is
-	// less than the limit.
-	n := len(result.Class)
-	if config.ReportLimit == 0 || n <= int(config.ReportLimit) {
-		return report // all classes, no LRQ
-	}
-
-	// Top queries
-	report.Class = make([]*qan.Class, config.ReportLimit)
-	for i := range result.Class[0:config.ReportLimit] {
-		report.Class[i] = result.Class[i].Class
-	}
-
-	// Low-ranking Queries
-	lrq := event.NewClass("lrq", "/* low-ranking queries */", false)
-
-	// Set timestamps of lrq query class to a proper 'zero' time,
-	// so it fits database's NO_ZERO_DATE restriction or
-	// something like that.
-	lrq.StartAt = time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC)
-	lrq.EndAt = time.Date(1970, time.January, 1, 0, 0, 1, 0, time.UTC)
-	lrq.Example.Ts = lrq.StartAt.UTC().Format(time.DateTime)
-
-	for _, class := range result.Class[config.ReportLimit:n] {
-		lrq.AddClass(class)
-	}
-	report.Class = append(report.Class, lrq.Class)
-
-	return report // top classes, the rest as LRQ
-}
-
-// MergeResult merges srcResult into destResult
-func MergeResult(destResult, srcResult Result) Result {
-	if destResult.Global == nil {
-		destResult.Global = srcResult.Global
-	} else if srcResult.Global != nil {
-		destResult.Global.AddClass(srcResult.Global)
-	}
-
-	if destResult.Class == nil || len(destResult.Class) == 0 {
-		destResult.Class = srcResult.Class
-	} else {
-		classes := make(map[string]*event.Class)
-		for _, class := range destResult.Class {
-			classes[class.Id] = class
-		}
-
-		for _, class := range srcResult.Class {
-			if _, ok := classes[class.Id]; ok {
-				classes[class.Id].AddClass(class)
-			} else {
-				classes[class.Id] = class
-				destResult.Class = append(destResult.Class, class)
-			}
-		}
-	}
-
-	destResult.RunTime += srcResult.RunTime
-	if srcResult.StopOffset > destResult.StopOffset {
-		destResult.StopOffset = srcResult.StopOffset
-	}
-
-	return destResult
+	return report
 }

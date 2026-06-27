@@ -18,9 +18,14 @@
 package mysql
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os/exec"
+	"regexp"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,16 +33,26 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
+	mysqlUtil "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/rdsslowlog"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/explain"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/queryinfo"
 	"github.com/shatteredsilicon/qan-agent/ticker"
+	"github.com/shatteredsilicon/qan-agent/util"
 	"github.com/shatteredsilicon/ssm/proto"
+	"github.com/shatteredsilicon/ssm/proto/qan"
+	queryProto "github.com/shatteredsilicon/ssm/proto/query"
+	"vitess.io/vitess/go/vt/sqlparser"
 )
 
 const MIN_SLOWLOG_ROTATION_SIZE int64 = 4096
+
+var sqlparserOtherAdminRegex = regexp.MustCompile(`(?i)^\s*(OPTIMIZE|REPAIR)\s+(?:NO_WRITE_TO_BINLOG|LOCAL\s+)?TABLE\s+(.*?)(?:\s+(QUICK|EXTENDED|USE_FRM))?\s*;?\s*$`)
+var salparserFallbackRegex = regexp.MustCompile(`(?i)^\s*(SHOW\s+STATUS)`)
 
 // --------------------------------------------------------------------------
 
@@ -178,7 +193,7 @@ func (a *RealAnalyzer) TakeOverPerconaServerRotation() error {
 	defer a.logger.Debug("TakeOverPerconaServerRotation:return")
 
 	// If slow log rotation is disabled, don't take over Percona Server slow log rotation.
-	if !boolValue(a.config.SlowLogRotation) {
+	if !util.ValueOf(a.config.SlowLogRotation) {
 		return nil
 	}
 
@@ -212,12 +227,12 @@ func (a *RealAnalyzer) setMySQLConfig() error {
 	a.logger.Debug("setMySQLConfig:call")
 	defer a.logger.Debug("setMySQLConfig:return")
 
-	start, stop, err := util.GetMySQLConfig(a.config)
+	start, stop, err := mysqlUtil.GetMySQLConfig(a.config)
 	if err != nil {
 		return err
 	}
 
-	if a.config.CollectFrom == "slowlog" && !boolValue(a.config.SlowLogManuallyOFF) {
+	if a.config.CollectFrom == "slowlog" && !util.ValueOf(a.config.SlowLogManuallyOFF) {
 		// if it's slowlog harvesting and @@slow_query_log
 		// is not set to OFF manually during the QAN runtime,
 		// we should set slow_query_log ON automatically
@@ -290,7 +305,7 @@ func (a *RealAnalyzer) configureMySQL(action string, tryLimit int, reconfigurate
 			lastErr = fmt.Errorf("cannot detect how to configure MySQL: %s", err)
 			continue
 		}
-		a.worker.SetConfig(a.config)
+		a.worker.SetConfig(a.mysqlConn, a.config)
 
 		a.logger.Debug("configureMySQL:" + action + ":exec " + action + " queries")
 
@@ -458,7 +473,7 @@ func (a *RealAnalyzer) run() {
 				a.config.SlowLogManuallyOFF = &slowlogOFF
 				if a.config.CollectFrom == "rds-slowlog" || a.config.CollectFrom == "slowlog" {
 					a.setMySQLConfig()
-					a.worker.SetConfig(a.config)
+					a.worker.SetConfig(a.mysqlConn, a.config)
 				}
 				if err := a.writeConfig(); err != nil {
 					a.logger.Error("Failed to write qan config %+v to disk: ", err)
@@ -487,7 +502,12 @@ func (a *RealAnalyzer) run() {
 }
 
 func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
-	a.logger.Debug(fmt.Sprintf("runWorker:call:%d", interval.Number))
+	if err := a.mysqlConn.Connect(); err != nil {
+		a.logger.Error(err)
+		return
+	}
+	defer a.mysqlConn.Close()
+
 	defer func() {
 		if err := recover(); err != nil {
 			errMsg := fmt.Sprintf(a.name+"-worker crashed: '%s': %s", interval, err)
@@ -506,7 +526,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 
 	// Let worker do whatever it needs before it starts processing
 	// the interval. This mostly makes testing easier.
-	if err := a.worker.Setup(interval, resultChan); err != nil {
+	if err := a.worker.Setup(a.mysqlConn, interval, resultChan); err != nil {
 		a.logger.Error(err)
 		return
 	}
@@ -530,7 +550,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 				}
 			}()
 
-			_, err := a.worker.Run()
+			_, err := a.worker.Run(a.mysqlConn)
 			if err != nil {
 				a.logger.Error("a.worker.Run error: ", err)
 			}
@@ -541,14 +561,14 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 				continue
 			}
 
-			resp := report.MakeReport(a.config.QAN, res.StartTime, res.EndTime, interval, res, a.logger)
+			resp := report.MakeReport(a.config, res.StartTime, res.EndTime, interval, res, a.logger, a.prefetchMetadata)
 			if err := a.spool.Write("qan", resp); err != nil {
 				a.logger.Warn("Lost report:", err)
 			}
 		}
 	} else {
 		// Run the worker to process the interval.
-		result, err := a.worker.Run()
+		result, err := a.worker.Run(a.mysqlConn)
 		t1 := time.Now()
 		if err != nil {
 			a.logger.Error(err)
@@ -562,18 +582,327 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 
 		// Translate the results into a report and spool.
 		// NOTE: "qan" here is correct; do not use a.name.
-		report := report.MakeReport(a.config.QAN, interval.StartTime, interval.StopTime, interval, result, a.logger)
+		report := report.MakeReport(a.config, interval.StartTime, interval.StopTime, interval, result, a.logger, a.prefetchMetadata)
 		if err := a.spool.Write("qan", report); err != nil {
 			a.logger.Warn("Lost report:", err)
 		}
 	}
 }
 
-// boolValue returns the value of the bool pointer passed in or
-// false if the pointer is nil.
-func boolValue(v *bool) bool {
-	if v != nil {
-		return *v
+func (a *RealAnalyzer) prefetchMetadata(class *event.Class) error {
+	if !util.ValueOf(a.config.PrefetchMetadata) {
+		return nil
 	}
-	return false
+
+	q := proto.QueryInfoParam{}
+
+	query := class.Fingerprint
+	if class.Example != nil && class.Example.Query != "" {
+		query = class.Example.Query
+		q.DB = class.Example.Db
+	}
+
+	abstract, tables, procedures, err := ParseQuery(query)
+	if err != nil {
+		return err
+	}
+
+	class.Abstract = abstract
+
+	for _, table := range tables {
+		q.Table = append(q.Table, proto.Table(table))
+		q.Index = append(q.Index, proto.Table(table))
+		q.Status = append(q.Status, proto.Table(table))
+	}
+	q.Procedure = procedures
+
+	queryInfo, err := queryinfo.QueryInfo(a.mysqlConn, &q)
+	if err != nil {
+		return err
+	}
+
+	if queryInfo == nil || queryInfo.Info == nil {
+		return err
+	}
+
+	var tMetadata []qan.TableMetadata
+	var vmetadata []qan.TableMetadata
+	var pMetadata []qan.ProcedureMetadata
+	for id, info := range queryInfo.Info {
+		dbAndName := strings.SplitN(id, ".", 2)
+		db, name := "", dbAndName[len(dbAndName)-1]
+		if len(dbAndName) == 2 {
+			db = dbAndName[0]
+		}
+		switch info.Type {
+		case proto.TypeDBView:
+			vmetadata = append(vmetadata, qan.TableMetadata{
+				Table:     queryProto.Table{Db: db, Table: name},
+				QueryInfo: info,
+			})
+		case proto.TypeDBProcedure:
+			pMetadata = append(pMetadata, qan.ProcedureMetadata{
+				Procedure: queryProto.Procedure{DB: db, Name: name},
+				QueryInfo: info,
+			})
+		default:
+			tMetadata = append(tMetadata, qan.TableMetadata{
+				Table:     queryProto.Table{Db: db, Table: name},
+				QueryInfo: info,
+			})
+		}
+	}
+
+	if len(tMetadata) > 0 || len(vmetadata) > 0 || len(pMetadata) > 0 {
+		metadata := &qan.Metadata{
+			Tables:     tMetadata,
+			Views:      vmetadata,
+			Procedures: pMetadata,
+			GuessDB:    queryInfo.GuessDB,
+		}
+		class.Metadata = metadata
+		if class.Example != nil && class.Example.Query != "" {
+			class.Example.Metadata = metadata
+		}
+	}
+
+	if !util.ValueOf(a.config.PrefetchExplain) || class.Example == nil || len(class.ExplainRows) > 0 {
+		return nil
+	}
+
+	res, err := explain.Explain(a.mysqlConn, class.Example.Db, class.Example.Query, false)
+	if err != nil {
+		return err
+	}
+
+	if err = a.addVisualExplain(res); err != nil {
+		return err
+	}
+
+	explainBytes, _ := json.Marshal(res)
+	class.Example.Explain = string(explainBytes)
+	return nil
+}
+
+// addVisualExplain converts classic explain in JSON form into visual explain.
+func (a *RealAnalyzer) addVisualExplain(explains *proto.ExplainResult) error {
+	if explains == nil || len(explains.Classic) == 0 {
+		return nil
+	}
+
+	rawExplainRows := []string{"id\tselect_type\ttable\tpartitions\ttype\tpossible_keys\tkey\tkey_len\tref\trows\tfiltered\tExtra"}
+	for i, explainRow := range explains.Classic {
+		id, _ := explainRow.Id.Value()
+		selectType, _ := explainRow.SelectType.Value()
+		table, _ := explainRow.Table.Value()
+		partitions, _ := explainRow.Partitions.Value()
+		theType, _ := explainRow.Type.Value()
+		if theType != nil {
+			explains.Classic[i].Type.String = strings.Split(explainRow.Type.String, "|")[0]
+			theType = explains.Classic[i].Type.String
+		}
+		possibleKeys, _ := explainRow.PossibleKeys.Value()
+		key, _ := explainRow.Key.Value()
+		if key != nil {
+			explains.Classic[i].Key.String = strings.Split(explainRow.Key.String, "|")[0]
+			key = explains.Classic[i].Key.String
+		}
+		keyLen, _ := explainRow.KeyLen.Value()
+		if keyLen != nil {
+			explains.Classic[i].KeyLen.String = strings.Split(explainRow.KeyLen.String, "|")[0]
+			keyLen = explains.Classic[i].KeyLen.String
+		}
+		ref, _ := explainRow.Ref.Value()
+		rows, _ := explainRow.Rows.Value()
+		filtered, _ := explainRow.Filtered.Value()
+		extra, _ := explainRow.Extra.Value()
+		explainRowString := fmt.Sprintf("%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v",
+			id,
+			selectType,
+			table,
+			partitions,
+			theType,
+			possibleKeys,
+			key,
+			keyLen,
+			ref,
+			rows,
+			filtered,
+			extra,
+		)
+		rawExplainRows = append(rawExplainRows, explainRowString)
+	}
+	rawExplain := strings.Join(rawExplainRows, "\n")
+	rawExplain = strings.NewReplacer("<nil>", "NULL").Replace(rawExplain)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "pt-visual-explain")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	go func() {
+		defer stdin.Close()
+		fmt.Fprintln(stdin, rawExplain)
+	}()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("cannot execute pt-visual-explain: %s", err.Error())
+	}
+	explains.Visual = string(out)
+	return nil
+}
+
+func walkTableNameNode(node sqlparser.SQLNode) (ts []queryProto.Table) {
+	sqlparser.Walk(func(node sqlparser.SQLNode) (bool, error) {
+		switch n := node.(type) {
+		case *sqlparser.ColName, *sqlparser.StarExpr:
+			return false, nil
+		case sqlparser.TableName:
+			t := queryProto.Table{Db: n.Qualifier.String(), Table: n.Name.String()}
+			ts = append(ts, t)
+			return false, nil
+		}
+
+		return true, nil
+	}, node)
+	return
+}
+
+func ParseQuery(query string) (
+	abstract string,
+	tables []queryProto.Table,
+	procedures []queryProto.Procedure,
+	err error,
+) {
+	// Fingerprints replace IN (1, 2) -> in (?+) but "?+" is not valid SQL so
+	// it breaks sqlparser/.
+	query = strings.Replace(query, "?+", "? ", -1)
+
+	// DIGEST_TEXT in performance_schema.events_statements_summary_by_digest might
+	// contains something like "(...)", e.g. INSERT INTO `t1` VALUES (...), which
+	// is not valid to sqlparser
+	query = strings.Replace(query, "(...)", "(?)", -1)
+
+	// Strip leading comments before parsing as it could cause problem
+	query = sqlparser.StripLeadingComments(query)
+
+	// Internal newlines break everything.
+	query = strings.Replace(query, "\n", " ", -1)
+
+	var dirtyTables []queryProto.Table
+	var nonAbstractTables []queryProto.Table
+
+	if parseResult, err := sqlparser.NewTestParser().Parse(query); err == nil {
+		sqlparser.Walk(func(node sqlparser.SQLNode) (bool, error) {
+			switch n := node.(type) {
+			case *sqlparser.Where:
+				nonAbstractTables = walkTableNameNode(n)
+				return false, nil
+			case *sqlparser.DerivedTable:
+				for _, t := range walkTableNameNode(n) {
+					dirtyTables = append(dirtyTables, t)
+				}
+				return false, nil
+			case sqlparser.DDLStatement:
+				t := n.GetTable()
+				abstract = fmt.Sprintf("%s TABLE", strings.ToUpper(n.GetAction().ToString()))
+				table := queryProto.Table{Db: t.Qualifier.String(), Table: t.Name.String()}
+				dirtyTables = append(dirtyTables, table)
+				return false, nil
+			case *sqlparser.CreateDatabase:
+				abstract = fmt.Sprintf("CREATE DATABASE %s", n.DBName.String())
+			case *sqlparser.AlterDatabase:
+				abstract = fmt.Sprintf("ALTER DATABASE %s", n.DBName.String())
+			case *sqlparser.DropDatabase:
+				abstract = fmt.Sprintf("DROP DATABASE %s", n.DBName.String())
+			case *sqlparser.CallProc:
+				p := queryProto.Procedure{
+					DB:   n.Name.Qualifier.String(),
+					Name: n.Name.Name.String(),
+				}
+				abstract = "CALL " + p.String()
+				procedures = append(procedures, p)
+				return false, nil
+			case *sqlparser.AliasedTableExpr:
+				if n.TableNameString() == "dual" {
+					return false, nil
+				}
+			case *sqlparser.ColName, *sqlparser.StarExpr:
+				return false, nil
+			case sqlparser.TableName:
+				t := queryProto.Table{Db: n.Qualifier.String(), Table: n.Name.String()}
+				dirtyTables = append(dirtyTables, t)
+				return false, nil
+			case *sqlparser.OtherAdmin:
+				// sqlparser doesn't deal with OPTIMIZE/REPAIR statement, we have to deal with it
+				if matches := sqlparserOtherAdminRegex.FindStringSubmatch(query); len(matches) > 0 {
+					abstract = matches[1]
+					for _, tID := range strings.Split(matches[2], ",") {
+						dbTable := strings.SplitN(strings.TrimSpace(tID), ".", 2)
+						db, table := "", strings.Trim(dbTable[len(dbTable)-1], "`")
+						if len(dbTable) == 2 {
+							db = strings.Trim(dbTable[0], "`")
+						}
+						dirtyTables = append(dirtyTables, queryProto.Table{Db: db, Table: table})
+					}
+				} else {
+					abstract = strings.Fields(sqlparser.CanonicalString(n))[0]
+				}
+			default:
+				if abstract == "" {
+					abstract = strings.Fields(sqlparser.CanonicalString(n))[0]
+				}
+			}
+
+			return true, nil
+		}, parseResult)
+	} else if matches := salparserFallbackRegex.FindStringSubmatch(query); len(matches) > 0 {
+		abstract = strings.ToUpper(matches[1])
+	} else {
+		return "", nil, nil, fmt.Errorf("failed to parse query '%s' with sqlparser: %s", query, err.Error())
+	}
+
+	existTables := map[string]struct{}{}
+	for _, t := range dirtyTables {
+		if t.Db == "" && t.Table == "" {
+			continue
+		}
+
+		tID := fmt.Sprintf("%s.%s", t.Db, t.Table)
+		if _, ok := existTables[tID]; !ok {
+			tables = append(tables, t)
+			existTables[tID] = struct{}{}
+		}
+	}
+
+	if len(tables) > 0 {
+		switch abstract {
+		case "SELECT":
+			for _, table := range tables {
+				if table.Db == "" {
+					abstract += " " + table.Table
+				} else {
+					abstract += " " + fmt.Sprintf("%s.%s", table.Db, table.Table)
+				}
+			}
+		default:
+			abstract += " " + tables[0].String()
+		}
+	}
+
+	for _, t := range nonAbstractTables {
+		if t.Db == "" && t.Table == "" {
+			continue
+		}
+
+		tID := fmt.Sprintf("%s.%s", t.Db, t.Table)
+		if _, ok := existTables[tID]; !ok {
+			tables = append(tables, t)
+			existTables[tID] = struct{}{}
+		}
+	}
+	return
 }

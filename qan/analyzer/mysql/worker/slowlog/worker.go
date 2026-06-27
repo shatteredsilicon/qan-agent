@@ -34,6 +34,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/qan-agent/util"
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
@@ -72,9 +73,8 @@ func (j *Job) String() string {
 }
 
 type Worker struct {
-	logger    *pct.Logger
-	config    analyzer.QAN
-	mysqlConn mysql.Connector
+	logger *pct.Logger
+	config analyzer.QAN
 	// --
 	ZeroRunTime bool // testing
 	// --
@@ -119,9 +119,8 @@ func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connecto
 	}
 
 	w := &Worker{
-		logger:    logger,
-		config:    config,
-		mysqlConn: mysqlConn,
+		logger: logger,
+		config: config,
 		// --
 		name:            name,
 		status:          pct.NewStatus([]string{name}),
@@ -138,13 +137,13 @@ func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connecto
 	return w
 }
 
-func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) error {
+func (w *Worker) Setup(mysqlConn mysql.Connector, interval *iter.Interval, resultChan chan *report.Result) error {
 	w.logger.Debug("Setup:call")
 	defer w.logger.Debug("Setup:return")
 	w.logger.Debug("Setup:", interval)
 
 	// Check if slow log rotation is enabled.
-	if boolValue(w.config.SlowLogRotation) {
+	if util.ValueOf(w.config.SlowLogRotation) {
 		// Check if max slow log size was reached.
 		if interval.EndOffset >= w.config.MaxSlowLogSize {
 			w.logger.Info(fmt.Sprintf("Rotating slow log: %s >= %s",
@@ -154,7 +153,7 @@ func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) 
 			// hence we need to switch off the slow_query_log monitoring
 			w.mrms.SwitchSlowlogCheck(w.config.UUID, false)
 			// Rotate slow log.
-			if err := w.rotateSlowLog(interval); err != nil {
+			if err := w.rotateSlowLog(mysqlConn, interval); err != nil {
 				w.logger.Error(err)
 			} else {
 				// Re-enable slow_query_log monitoring
@@ -169,8 +168,8 @@ func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) 
 		SlowLogFile:    interval.Filename,
 		StartOffset:    interval.StartOffset,
 		EndOffset:      interval.EndOffset,
-		ExampleQueries: boolValue(w.config.ExampleQueries),
-		RetainSlowLogs: intValue(w.config.RetainSlowLogs),
+		ExampleQueries: util.ValueOf(w.config.ExampleQueries),
+		RetainSlowLogs: util.ValueOf(w.config.RetainSlowLogs),
 	}
 	w.logger.Debug("Setup:", w.job)
 
@@ -178,7 +177,7 @@ func (w *Worker) Setup(interval *iter.Interval, resultChan chan *report.Result) 
 	return nil
 }
 
-func (w *Worker) Run() (*report.Result, error) {
+func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
 	w.logger.Debug("Run:call")
 	defer w.logger.Debug("Run:return")
 
@@ -393,7 +392,7 @@ func (w *Worker) Status() map[string]string {
 	return w.status.All()
 }
 
-func (w *Worker) SetConfig(config analyzer.QAN) {
+func (w *Worker) SetConfig(_ mysql.Connector, config analyzer.QAN) {
 	w.config = config
 }
 
@@ -433,19 +432,14 @@ func (w *Worker) fingerprinter() {
 	}
 }
 
-func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
+func (w *Worker) rotateSlowLog(mysqlConn mysql.Connector, interval *iter.Interval) error {
 	w.logger.Debug("rotateSlowLog:call")
 	defer w.logger.Debug("rotateSlowLog:return")
 
 	w.status.Update(w.name, "Rotating slow log")
 	defer w.status.Update(w.name, "Idle")
 
-	if err := w.mysqlConn.Connect(); err != nil {
-		return err
-	}
-	defer w.mysqlConn.Close()
-
-	versionStr, err := w.mysqlConn.GetGlobalVarString("version")
+	versionStr, err := mysqlConn.GetGlobalVarString("version")
 	if err != nil {
 		return err
 	}
@@ -457,7 +451,7 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 	}
 	if !fastRotate {
 		// Stop slow log so we don't move it while MySQL is using it.
-		if err := w.mysqlConn.Exec(w.config.Stop); err != nil {
+		if err := mysqlConn.Exec(w.config.Stop); err != nil {
 			return err
 		}
 	}
@@ -471,15 +465,15 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 	// progress takes too long, the connection might be closed by other goroutines.
 	// Which implys that we need a better management of DB connections.
 	// TODO: Refactor the DB connection management
-	if postErr = w.mysqlConn.Connect(); postErr == nil {
+	if postErr = mysqlConn.Connect(); postErr == nil {
 		if fastRotate {
-			if err := w.mysqlConn.Exec([]string{"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS"}); err != nil {
+			if err := mysqlConn.Exec([]string{"FLUSH NO_WRITE_TO_BINLOG SLOW LOGS"}); err != nil {
 				// MySQL 5.1 support.
-				postErr = w.mysqlConn.Exec([]string{"FLUSH LOGS"})
+				postErr = mysqlConn.Exec([]string{"FLUSH LOGS"})
 			}
 		} else {
 			// Re-enable slow log.
-			postErr = w.mysqlConn.Exec(w.config.Start)
+			postErr = mysqlConn.Exec(w.config.Start)
 		}
 	}
 
@@ -504,11 +498,11 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 	if err != nil {
 		return err
 	}
-	if len(filesFound) <= intValue(w.config.RetainSlowLogs) {
+	if len(filesFound) <= util.ValueOf(w.config.RetainSlowLogs) {
 		return nil
 	}
 	sort.Strings(filesFound)
-	for _, f := range filesFound[:len(filesFound)-intValue(w.config.RetainSlowLogs)] {
+	for _, f := range filesFound[:len(filesFound)-util.ValueOf(w.config.RetainSlowLogs)] {
 		w.status.Update(w.name, "Removing slow log "+f)
 		if err := os.Remove(f); err != nil {
 			w.logger.Warn(err)
@@ -518,22 +512,4 @@ func (w *Worker) rotateSlowLog(interval *iter.Interval) error {
 	}
 
 	return nil
-}
-
-// boolValue returns the value of the bool pointer passed in or
-// false if the pointer is nil.
-func boolValue(v *bool) bool {
-	if v != nil {
-		return *v
-	}
-	return false
-}
-
-// intValue returns the value of the int pointer passed in or
-// 0 if the pointer is nil.
-func intValue(v *int) int {
-	if v != nil {
-		return *v
-	}
-	return 0
 }

@@ -9,9 +9,9 @@ import (
 	"github.com/percona/percona-toolkit/src/go/mongolib/fingerprinter"
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
 	mongostats "github.com/percona/percona-toolkit/src/go/mongolib/stats"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/status"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
@@ -24,7 +24,7 @@ const (
 )
 
 // New returns configured *Aggregator
-func New(timeStart time.Time, config pc.QAN) *Aggregator {
+func New(timeStart time.Time, config analyzer.QAN) *Aggregator {
 	defaultExampleQueries := DefaultExampleQueries
 	// verify config
 	if config.Interval == 0 {
@@ -52,7 +52,7 @@ func New(timeStart time.Time, config pc.QAN) *Aggregator {
 // Aggregator aggregates system.profile document
 type Aggregator struct {
 	// dependencies
-	config pc.QAN
+	config analyzer.QAN
 
 	// status
 	status *status.Status
@@ -225,7 +225,8 @@ func (self *Aggregator) interval(ts time.Time) *qan.Report {
 	result := self.createResult()
 
 	// translate result into report and return it
-	return report.MakeReport(self.config, self.timeStart, self.timeEnd, nil, result, nil)
+	report := report.MakeReport(self.config, self.timeStart, self.timeEnd, nil, result, nil, nil)
+	return report
 }
 
 // TimeStart returns start time for current interval

@@ -127,13 +127,13 @@ func (m *MySQLAnalyzer) Start() error {
 	case "slowlog":
 		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn, m.mrms)
 	case "perfschema":
-		worker = m.perfschemaWorkerFactory.Make(name+"-worker", mysqlConn, config)
+		worker = m.perfschemaWorkerFactory.Make(name+"-worker", config)
 	case "rds-slowlog":
 		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
 	default:
 		panic("Invalid analyzerType: " + analyzerType)
 	}
-	worker.SetConfig(config)
+	worker.SetConfig(mysqlConn, config)
 
 	// Create and start a new analyzer. This should return immediately.
 	// The analyzer will configure MySQL, start its iter, then run it worker

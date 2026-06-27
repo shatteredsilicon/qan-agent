@@ -18,6 +18,7 @@
 package qan_worker
 
 import (
+	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
@@ -50,13 +51,13 @@ func NewQanWorker() *QanWorker {
 	return w
 }
 
-func (w *QanWorker) Setup(interval *iter.Interval, resultChan chan *report.Result) error {
+func (w *QanWorker) Setup(_ mysql.Connector, interval *iter.Interval, resultChan chan *report.Result) error {
 	w.Interval = interval
 	w.SetupChan <- true
 	return w.crashOrError()
 }
 
-func (w *QanWorker) Run() (*report.Result, error) {
+func (w *QanWorker) Run(_ mysql.Connector) (*report.Result, error) {
 	w.RunChan <- true
 	return w.Result, w.crashOrError()
 }
@@ -77,7 +78,7 @@ func (w *QanWorker) Status() map[string]string {
 	}
 }
 
-func (w *QanWorker) SetConfig(c analyzer.QAN) {
+func (w *QanWorker) SetConfig(_ mysql.Connector, c analyzer.QAN) {
 }
 
 // --------------------------------------------------------------------------

@@ -18,7 +18,7 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible
 	github.com/pganalyze/pg_query_go/v6 v6.1.0
 	github.com/pkg/errors v0.9.1
-	github.com/shatteredsilicon/ssm v0.0.0-20250716161023-a4554c8f2a4c
+	github.com/shatteredsilicon/ssm v0.0.0-20260712151012-ba68bc2f60d4
 	github.com/stretchr/testify v1.11.1
 	go.mongodb.org/mongo-driver v1.13.1
 	go4.org v0.0.0-20260112195520-a5071408f32f

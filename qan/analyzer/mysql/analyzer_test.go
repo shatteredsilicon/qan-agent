@@ -18,8 +18,10 @@
 package mysql_test
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
+	"testing"
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/instance"
@@ -38,6 +40,7 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	qp "github.com/shatteredsilicon/ssm/proto/qan"
+	queryProto "github.com/shatteredsilicon/ssm/proto/query"
 	"github.com/stretchr/testify/require"
 	. "gopkg.in/check.v1"
 )
@@ -528,4 +531,305 @@ func (s *AnalyzerTestSuite) TestSlowLogTakeOver(t *C) {
 	t.Assert(err, IsNil)
 	test.WaitStatus(1, a, "qan-analyzer", "Stopped")
 	t.Check(a.String(), Equals, "qan-analyzer")
+}
+
+var parseQueryTests = []struct {
+	query    string
+	abstract string
+	tables   []queryProto.Table
+}{
+	{
+		"select c from t where id=?",
+		"SELECT t",
+		[]queryProto.Table{{Db: "", Table: "t"}},
+	},
+	{ // #1
+		"select c from db.t where id=?",
+		"SELECT db.t",
+		[]queryProto.Table{{Db: "db", Table: "t"}},
+	},
+	{ // #2
+		"select c from db.t, t2 where id=?",
+		"SELECT db.t t2",
+		[]queryProto.Table{
+			{Db: "db", Table: "t"},
+			{Db: "", Table: "t2"},
+		},
+	},
+	{ // #3
+		"SELECT /*!40001 SQL_NO_CACHE */ * FROM `film`",
+		"SELECT film",
+		[]queryProto.Table{{Db: "", Table: "film"}},
+	},
+	{ // #4
+		"select c from ta join tb on (ta.id=tb.id) where id=?",
+		"SELECT ta tb",
+		[]queryProto.Table{
+			{Db: "", Table: "ta"},
+			{Db: "", Table: "tb"},
+		},
+	},
+	{ // #5
+		"select c from ta join tb on (ta.id=tb.id) join tc on (1=1) where id=?",
+		"SELECT ta tb tc",
+		[]queryProto.Table{
+			{Db: "", Table: "ta"},
+			{Db: "", Table: "tb"},
+			{Db: "", Table: "tc"},
+		},
+	},
+
+	/////////////////////////////////////////////////////////////////////
+	// INSERT
+	{ // #6
+		"INSERT INTO my_table (a,b,c) VALUES (1, 2, 3)",
+		"INSERT my_table",
+		[]queryProto.Table{{Db: "", Table: "my_table"}},
+	},
+	{ // #7
+		"INSERT INTO d.t (a,b,c) VALUES (1, 2, 3)",
+		"INSERT d.t",
+		[]queryProto.Table{{Db: "d", Table: "t"}},
+	},
+
+	/////////////////////////////////////////////////////////////////////
+	// UPDATE
+	{ // #8
+		"update t set foo=?",
+		"UPDATE t",
+		[]queryProto.Table{{Db: "", Table: "t"}},
+	},
+
+	/////////////////////////////////////////////////////////////////////
+	// DELETE
+	{ // #9
+		"delete from t where id in (?+)",
+		"DELETE t",
+		[]queryProto.Table{{Db: "", Table: "t"}},
+	},
+
+	/////////////////////////////////////////////////////////////////////
+	// Other with partial support
+	{ // #10
+		"show status like ?",
+		"SHOW STATUS",
+		nil,
+	},
+
+	/////////////////////////////////////////////////////////////////////
+	{ // #11
+		"REPLACE INTO my_table (a,b,c) VALUES (1, 2, 3)",
+		"REPLACE my_table",
+		[]queryProto.Table{{Db: "", Table: "my_table"}},
+	},
+	{ // #12
+		"OPTIMIZE TABLE `o2408`.`agent_log`",
+		"OPTIMIZE o2408.agent_log",
+		[]queryProto.Table{
+			{Db: "o2408", Table: "agent_log"},
+		},
+	},
+	{ // #13
+		"select c from t1 join t2 using (c) where id=?",
+		"SELECT t1 t2",
+		[]queryProto.Table{
+			{Db: "", Table: "t1"},
+			{Db: "", Table: "t2"},
+		},
+	},
+	{ // #14
+		"insert into data values (...)",
+		"INSERT data",
+		[]queryProto.Table{
+			{Db: "", Table: "data"},
+		},
+	},
+	{ // #15
+		"call\n pita(?)",
+		"CALL pita",
+		nil,
+	},
+	{ // #16 exceeds MAX_JOIN_DEPTH
+		"select c from a" +
+			" join b on (1=1) join c on (1=1) join d on (1=1) join e on (1=1)" +
+			" join f on (1=1) join g on (1=1) join h on (1=1) join i on (1=1)" +
+			" join j on (1=1) join k on (1=1) join l on (1=1) join m on (1=1)" +
+			" join n on (1=1) join o on (1=1) join p on (1=1) join q on (1=1)" +
+			" join r on (1=1) join s on (1=1) join t on (1=1) join u on (1=1)" +
+			" join v on (1=1) join w on (1=1) join x on (1=1) join y on (1=1)" +
+			" join z on (1=1)" +
+			" where id=?",
+		"SELECT a b c d e f g h i j k l m n o p q r s t u v w x y z",
+		[]queryProto.Table{
+			{"", "a"},
+			{"", "b"}, {"", "c"}, {"", "d"}, {"", "e"},
+			{"", "f"}, {"", "g"}, {"", "h"}, {"", "i"},
+			{"", "j"}, {"", "k"}, {"", "l"}, {"", "m"},
+			{"", "n"}, {"", "o"}, {"", "p"}, {"", "q"},
+			{"", "r"}, {"", "s"}, {"", "t"}, {"", "u"},
+			{"", "v"}, {"", "w"}, {"", "x"}, {"", "y"},
+			{"", "z"},
+		},
+	},
+	{ // #17
+		"SELECT DISTINCT c\n FROM sbtest1\nWHERE id\nBETWEEN 1\nAND 100\nORDER BY  c\n",
+		"SELECT sbtest1",
+		[]queryProto.Table{{Db: "", Table: "sbtest1"}},
+	},
+	{ // #18
+		"SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN 1 AND 100 ORDER BY c",
+		"SELECT sbtest2",
+		[]queryProto.Table{{Db: "", Table: "sbtest2"}},
+	},
+	// Don't remove the ; at the end of the next query.
+	// There was an error in the past where a ; at the end was making the
+	// parser to fail and we want to ensure it works now.
+	{ // #19
+		"SELECT * from `sysbenchtest`.`t6002_0`;",
+		"SELECT sysbenchtest.t6002_0",
+		[]queryProto.Table{{Db: "sysbenchtest", Table: "t6002_0"}},
+	},
+	{ // #20
+		"use zapp",
+		"USE",
+		nil,
+	},
+	// Schema was set as default from the previous USE
+	{ // #21
+		"SELECT * from `t6003_0`;",
+		"SELECT t6003_0",
+		[]queryProto.Table{{Db: "", Table: "t6003_0"}},
+	},
+	{ // #22
+		"CREATE TABLE t6004 (PRIMARY KEY id int, a varchar(25)) engine=innodb",
+		"CREATE TABLE t6004",
+		[]queryProto.Table{{Db: "", Table: "t6004"}},
+	},
+	{ // #23
+		"ALTER TABLE sakila.actor ADD COLUMN newcol int",
+		"ALTER TABLE sakila.actor",
+		[]queryProto.Table{{Db: "sakila", Table: "actor"}},
+	},
+	// Db & Table are empty because CREATE DATABASE is not yet supported by Vitess.sqlparser
+	{ // #24
+		"CREATE DATABASE ssm",
+		"CREATE DATABASE ssm",
+		nil,
+	},
+	{ // #25
+		"create index idx ON percona (f1)",
+		"ALTER TABLE percona",
+		[]queryProto.Table{{Db: "", Table: "percona"}},
+	},
+	{ // #26 override the default USE
+		"create index idx ON brannigan.percona (f1)",
+		"ALTER TABLE brannigan.percona",
+		[]queryProto.Table{{Db: "brannigan", Table: "percona"}},
+	},
+	// PMM-1892. Upgraded Vitess libraries to support this query.
+	// Notice that the query below is not exactly the same reported in the ticket; this
+	// query has `auto_increment` between backticks because it is a reserved MySQL word
+	// but MySQL accepts it anyway as a field name while Vitess doesn't.
+	{
+		"SELECT table_schema, table_name, column_name, `auto_increment`, " +
+			"pow(2, CASE data_type WHEN 'tinyint' THEN 7 WHEN 'smallint' " +
+			"THEN 15 WHEN 'mediumint' THEN 23 WHEN 'int' THEN 31 WHEN 'bigint' " +
+			"THEN 63 end+(column_type LIKE '% unsigned'))-1 AS max_int FROM " +
+			"information_schema.tables t JOIN information_schema.columns c " +
+			"USING (table_schema,table_name) WHERE c.extra = 'auto_increment' " +
+			"AND t.auto_increment IS NOT NULL",
+		"SELECT information_schema.tables information_schema.columns",
+		[]queryProto.Table{
+			{Db: "information_schema", Table: "tables"},
+			{Db: "information_schema", Table: "columns"},
+		},
+	},
+	{ // #28
+		"SELECT @@`version`",
+		"SELECT",
+		nil,
+	},
+	{ // #29
+		"SELECT t1.*, t2.* FROM (SELECT * FROM test1) t1 JOIN (SELECT * FROM test2) t2 ON t1.id1 = t2.id2",
+		"SELECT test1 test2",
+		[]queryProto.Table{
+			{Db: "", Table: "test1"},
+			{Db: "", Table: "test2"},
+		},
+	},
+	{ // #30
+		"SELECT t.* FROM (SELECT t1.*, t2.* FROM (SELECT * FROM test1) t1 JOIN (SELECT * FROM test2) t2 ON t1.id1 = t2.id2) t UNION SELECT t.* FROM (SELECT t3.*, t4.* FROM (SELECT * FROM test3) t3 JOIN (SELECT * FROM test4) t4 ON t3.id3 = t4.id4) t",
+		"SELECT test1 test2 test3 test4",
+		[]queryProto.Table{
+			{Db: "", Table: "test1"},
+			{Db: "", Table: "test2"},
+			{Db: "", Table: "test3"},
+			{Db: "", Table: "test4"},
+		},
+	},
+	{ // #31
+		`
+		-- UPDATE test users
+		UPDATE test.users
+		SET user_id = @USER,
+			email = (
+				SELECT user_email
+				FROM test.wp_users
+				WHERE id = @USER
+			)
+		WHERE wp_user_id = @USER
+		`,
+		"UPDATE test.users",
+		[]queryProto.Table{
+			{Db: "test", Table: "users"},
+			{Db: "test", Table: "wp_users"},
+		},
+	},
+	{ // #32
+		`
+		-- CREATE TEMPORARY TABLE
+		CREATE TEMPORARY TABLE test.tmp_t (
+			PRIMARY KEY tmp_t_pkey (product_id),
+			INDEX comp_key (symbol,expiration_date)
+		)
+			SELECT product_id, expiration_date, symbol, IF(cs = 0, 'P', 'C') as cs
+			FROM test.t t
+			WHERE t.ct = 7 AND t.expiration_date >= CURDATE() AND t.af = true
+		`,
+		"CREATE TABLE test.tmp_t",
+		[]queryProto.Table{
+			{Db: "test", Table: "tmp_t"},
+		},
+	},
+	{ // #33
+		`
+		SELECT *
+		FROM t1
+		WHERE dID IN
+			(SELECT dID
+			FROM t2
+			WHERE uID ='12345')
+				AND ` + "`enabled` = 1" + `
+				AND ` + "`generated` = 1" + `
+		`,
+		"SELECT t1",
+		[]queryProto.Table{
+			{Db: "", Table: "t1"},
+			{Db: "", Table: "t2"},
+		},
+	},
+}
+
+func TestParseQuery(t *testing.T) {
+	t.Parallel()
+
+	for i, test := range parseQueryTests {
+		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
+			abstract, tables, _, err := mysqlAnalyzer.ParseQuery(test.query)
+			require.Nil(t, err)
+
+			require.Equal(t, test.abstract, abstract)
+			require.Equal(t, test.tables, tables)
+		})
+	}
 }

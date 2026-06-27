@@ -82,7 +82,7 @@ func (m *MongoAnalyzer) Start() error {
 		mongoOpts,
 		m.logger,
 		m.spool,
-		m.config.QAN,
+		m.config,
 	)
 
 	if err := m.profiler.Start(); err != nil {
