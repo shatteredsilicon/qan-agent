@@ -67,7 +67,7 @@ func (self *profiler) Start() (err error) {
 	}
 
 	// create aggregator which collects documents and aggregates them into qan report
-	self.aggregator = aggregator.New(time.Now(), self.config)
+	self.aggregator = aggregator.New(time.Now(), self.config, self.client, self.logger)
 	reportChan := self.aggregator.Start()
 
 	// create sender which sends qan reports and start it
@@ -185,6 +185,8 @@ func (self *profiler) Stop() error {
 	if !self.running {
 		return nil
 	}
+
+	defer self.client.Disconnect(context.TODO())
 
 	// notify goroutine to close
 	close(self.doneChan)

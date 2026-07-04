@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -10,11 +11,16 @@ import (
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
 	mongostats "github.com/percona/percona-toolkit/src/go/mongolib/stats"
 	"github.com/shatteredsilicon/ssm/proto/qan"
+	"go.mongodb.org/mongo-driver/mongo"
 
+	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/status"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/explain"
+	"github.com/shatteredsilicon/qan-agent/util"
+	ssmProto "github.com/shatteredsilicon/ssm/proto"
 )
 
 const (
@@ -24,7 +30,7 @@ const (
 )
 
 // New returns configured *Aggregator
-func New(timeStart time.Time, config analyzer.QAN) *Aggregator {
+func New(timeStart time.Time, config analyzer.QAN, client *mongo.Client, logger *pct.Logger) *Aggregator {
 	defaultExampleQueries := DefaultExampleQueries
 	// verify config
 	if config.Interval == 0 {
@@ -34,6 +40,8 @@ func New(timeStart time.Time, config analyzer.QAN) *Aggregator {
 
 	aggregator := &Aggregator{
 		config: config,
+		client: client,
+		logger: logger,
 	}
 
 	// create duration from interval
@@ -53,6 +61,8 @@ func New(timeStart time.Time, config analyzer.QAN) *Aggregator {
 type Aggregator struct {
 	// dependencies
 	config analyzer.QAN
+	client *mongo.Client
+	logger *pct.Logger
 
 	// status
 	status *status.Status
@@ -225,7 +235,7 @@ func (self *Aggregator) interval(ts time.Time) *qan.Report {
 	result := self.createResult()
 
 	// translate result into report and return it
-	report := report.MakeReport(self.config, self.timeStart, self.timeEnd, nil, result, nil, nil)
+	report := report.MakeReport(self.config, self.timeStart, self.timeEnd, nil, result, self.logger, self.prefetchMetadata)
 	return report
 }
 
@@ -254,7 +264,7 @@ func (self *Aggregator) createResult() *report.Result {
 	global := event.NewClass("", "", false)
 	queryStats := queries.CalcQueriesStats(int64(self.config.Interval))
 	classes := []*event.Class{}
-	exampleQueries := boolValue(self.config.ExampleQueries)
+	exampleQueries := util.ValueOf(self.config.ExampleQueries)
 	for _, queryInfo := range queryStats {
 		class := event.NewClass(queryInfo.ID, queryInfo.Fingerprint, exampleQueries)
 		if exampleQueries {
@@ -315,11 +325,25 @@ func newEventTimeStatsInMilliseconds(s mongostats.Statistics) *qan.TimeStats {
 	}
 }
 
-// boolValue returns the value of the bool pointer passed in or
-// false if the pointer is nil.
-func boolValue(v *bool) bool {
-	if v != nil {
-		return *v
+func (self *Aggregator) prefetchMetadata(class *event.Class) error {
+	var result *ssmProto.ExplainResult
+
+	if !util.ValueOf(self.config.PrefetchMetadata) || class.Example == nil {
+		return nil
 	}
-	return false
+
+	res, err := explain.Explain(self.client, class.Example.Db, class.Example.Query)
+	if err != nil {
+		return err
+	}
+
+	if res != nil && res.JSON != "" {
+		result = &ssmProto.ExplainResult{
+			JSON: res.JSON,
+		}
+	}
+
+	explainBytes, _ := json.Marshal(result)
+	class.Example.Explain = string(explainBytes)
+	return nil
 }
