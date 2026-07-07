@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
 // An Interval represents a period during which queries are fetched,
@@ -41,6 +43,23 @@ func (i *Interval) String() string {
 	t0 := i.StartTime.Format("2006-01-02 15:04:05 MST")
 	t1 := i.StopTime.Format("2006-01-02 15:04:05 MST")
 	return fmt.Sprintf("%d %s %s to %s (%d-%d)", i.Number, i.Filename, t0, t1, i.StartOffset, i.EndOffset)
+}
+
+func (i *Interval) Handler(report *qan.Report, stopOffset int64, rateLimit uint) {
+	if i != nil {
+		size, err := pct.FileSize(i.Filename)
+		if err != nil {
+			size = 0
+		}
+
+		// slow log data
+		report.SlowLogFile = i.Filename
+		report.SlowLogFileSize = size
+		report.StartOffset = i.StartOffset
+		report.EndOffset = i.EndOffset
+		report.StopOffset = stopOffset
+		report.RateLimit = rateLimit
+	}
 }
 
 // An IntervalIter sends Intervals.

@@ -31,7 +31,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package event
 
 import (
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/log"
 	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )

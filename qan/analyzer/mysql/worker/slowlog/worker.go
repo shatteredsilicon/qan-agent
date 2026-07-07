@@ -28,8 +28,9 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/config"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
+	mysqlEvent "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
@@ -226,7 +227,7 @@ func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
 
 	// Make an event aggregate to do all the heavy lifting: fingerprint
 	// queries, group, and aggregate.
-	aggregator := event.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
+	aggregator := mysqlEvent.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
 
 	// Misc runtime meta data.
 	jobSize := w.job.EndOffset - w.job.StartOffset
@@ -235,7 +236,7 @@ func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
 	rateType := ""
 	rateLimit := uint(0)
 
-	sendResult := func(a *event.Aggregator, res *report.Result) {
+	sendResult := func(a *mysqlEvent.Aggregator, res *report.Result) {
 		r := a.Finalize()
 
 		// The aggregator result is a map, but we need an array of classes for
@@ -283,7 +284,7 @@ EVENT_LOOP:
 
 		if aggregator.ShouldFinalize(e) {
 			sendResult(aggregator, result)
-			aggregator = event.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
+			aggregator = mysqlEvent.NewAggregator(w.job.ExampleQueries, w.utcOffset, w.outlierTime)
 			result = &report.Result{
 				RateLimit:  rateLimit,
 				StopOffset: result.StopOffset,

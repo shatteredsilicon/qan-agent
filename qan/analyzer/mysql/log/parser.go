@@ -46,6 +46,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/log"
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
@@ -68,7 +69,7 @@ type SlowLogParser struct {
 	opt    Options
 	// --
 	stopChan        chan bool
-	eventChan       chan *Event
+	eventChan       chan *log.Event
 	inHeader        bool
 	inQuery         bool
 	inExplain       bool
@@ -79,7 +80,7 @@ type SlowLogParser struct {
 	lineOffset      uint64
 	endOffset       uint64
 	stopped         bool
-	event           *Event
+	event           *log.Event
 }
 
 // NewSlowLogParser returns a new SlowLogParser that reads from the open file.
@@ -94,21 +95,21 @@ func NewSlowLogParser(r io.ReadSeeker, opt Options) *SlowLogParser {
 		opt:    opt,
 		// --
 		stopChan:    make(chan bool, 1),
-		eventChan:   make(chan *Event),
+		eventChan:   make(chan *log.Event),
 		inHeader:    false,
 		inQuery:     false,
 		headerLines: 0,
 		queryLines:  0,
 		lineOffset:  0,
 		bytesRead:   opt.StartOffset,
-		event:       NewEvent(),
+		event:       log.NewEvent(),
 	}
 	return p
 }
 
 // EventChan returns the unbuffered event channel on which the caller can
 // receive events.
-func (p *SlowLogParser) EventChan() <-chan *Event {
+func (p *SlowLogParser) EventChan() <-chan *log.Event {
 	return p.eventChan
 }
 
@@ -477,7 +478,7 @@ func (p *SlowLogParser) sendEvent(inHeader bool, inQuery bool) {
 
 	// Make a new event and reset our metadata.
 	defer func() {
-		p.event = NewEvent()
+		p.event = log.NewEvent()
 		p.headerLines = 0
 		p.queryLines = 0
 		p.inHeader = inHeader
@@ -504,4 +505,19 @@ func (p *SlowLogParser) sendEvent(inHeader bool, inQuery bool) {
 	case <-p.stopChan:
 		p.stopped = true
 	}
+}
+
+// Options encapsulate common options for making a new LogParser.
+type Options struct {
+	StartOffset        uint64          // byte offset in file at which to start parsing
+	FilterAdminCommand map[string]bool // admin commands to ignore
+	Debug              bool            // print trace info to STDOUT
+	DefaultLocation    *time.Location  // DefaultLocation to assume for logs in MySQL < 5.7 format.
+}
+
+// A LogParser sends events to a channel.
+type LogParser interface {
+	Start() error
+	Stop()
+	EventChan() <-chan *log.Event
 }

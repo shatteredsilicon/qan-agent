@@ -14,9 +14,10 @@ import (
 
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/postgresql/aggregator"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/postgresql/logparser"
-	"github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 )
 
 var (
@@ -58,7 +59,7 @@ type logFileRecord struct {
 }
 
 type LogFileCollector struct {
-	config              config.QAN
+	config              analyzer.QAN
 	logger              *pct.Logger
 	db                  *sql.DB
 	spooler             data.Spooler
@@ -66,7 +67,7 @@ type LogFileCollector struct {
 	modTimeOfLatestFile time.Time
 }
 
-func NewLogFileCollector(config config.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler) *LogFileCollector {
+func NewLogFileCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler) *LogFileCollector {
 	return &LogFileCollector{
 		config:  config,
 		db:      db,
@@ -117,6 +118,22 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 	go func() {
 		ag := aggregator.NewAggregator(*c.config.ExampleQueries)
 		startTime := time.Now()
+
+		finalize := func() {
+			now := time.Now()
+			result := ag.Finalize(c.config.QAN, startTime, now)
+			if len(result.Class) == 0 {
+				return
+			}
+
+			report := report.MakeReport(c.config, startTime, now, nil, result, c.logger, pretchDataHandler(c.config, c.db))
+			ag = aggregator.NewAggregator(true)
+			startTime = time.Now()
+			if err := c.spooler.Write("qan", report); err != nil {
+				c.logger.Warn("Lost report: ", err)
+			}
+		}
+
 		for {
 			select {
 			case e := <-logEventChan:
@@ -125,23 +142,12 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 				}
 				e.AttemptToResolveParams()
 				if ag.ShouldFinalize(e) {
-					report := ag.Finalize(c.config, startTime, time.Now())
-					ag = aggregator.NewAggregator(true)
-					startTime = time.Now()
-					if err := c.spooler.Write("qan", report); err != nil {
-						c.logger.Warn("Lost report: ", err)
-					}
+					finalize()
 				}
 				ag.AddEvent(e)
 			case <-stopC:
 			case <-ctx.Done():
-				report := ag.Finalize(c.config, startTime, time.Now())
-				if len(report.Class) == 0 {
-					return
-				}
-				if err := c.spooler.Write("qan", report); err != nil {
-					c.logger.Warn("Lost report: ", err)
-				}
+				finalize()
 				return
 			}
 		}

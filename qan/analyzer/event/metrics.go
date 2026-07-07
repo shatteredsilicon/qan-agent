@@ -33,7 +33,7 @@ package event
 import (
 	"sort"
 
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/log"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 

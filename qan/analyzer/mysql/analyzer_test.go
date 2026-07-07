@@ -534,19 +534,22 @@ func (s *AnalyzerTestSuite) TestSlowLogTakeOver(t *C) {
 }
 
 var parseQueryTests = []struct {
-	query    string
-	abstract string
-	tables   []queryProto.Table
+	query      string
+	abstract   string
+	tables     []queryProto.Table
+	procedures []queryProto.Procedure
 }{
 	{
 		"select c from t where id=?",
 		"SELECT t",
 		[]queryProto.Table{{Db: "", Table: "t"}},
+		nil,
 	},
 	{ // #1
 		"select c from db.t where id=?",
 		"SELECT db.t",
 		[]queryProto.Table{{Db: "db", Table: "t"}},
+		nil,
 	},
 	{ // #2
 		"select c from db.t, t2 where id=?",
@@ -555,11 +558,13 @@ var parseQueryTests = []struct {
 			{Db: "db", Table: "t"},
 			{Db: "", Table: "t2"},
 		},
+		nil,
 	},
 	{ // #3
 		"SELECT /*!40001 SQL_NO_CACHE */ * FROM `film`",
 		"SELECT film",
 		[]queryProto.Table{{Db: "", Table: "film"}},
+		nil,
 	},
 	{ // #4
 		"select c from ta join tb on (ta.id=tb.id) where id=?",
@@ -568,6 +573,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "ta"},
 			{Db: "", Table: "tb"},
 		},
+		nil,
 	},
 	{ // #5
 		"select c from ta join tb on (ta.id=tb.id) join tc on (1=1) where id=?",
@@ -577,6 +583,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "tb"},
 			{Db: "", Table: "tc"},
 		},
+		nil,
 	},
 
 	/////////////////////////////////////////////////////////////////////
@@ -585,11 +592,13 @@ var parseQueryTests = []struct {
 		"INSERT INTO my_table (a,b,c) VALUES (1, 2, 3)",
 		"INSERT my_table",
 		[]queryProto.Table{{Db: "", Table: "my_table"}},
+		nil,
 	},
 	{ // #7
 		"INSERT INTO d.t (a,b,c) VALUES (1, 2, 3)",
 		"INSERT d.t",
 		[]queryProto.Table{{Db: "d", Table: "t"}},
+		nil,
 	},
 
 	/////////////////////////////////////////////////////////////////////
@@ -598,6 +607,7 @@ var parseQueryTests = []struct {
 		"update t set foo=?",
 		"UPDATE t",
 		[]queryProto.Table{{Db: "", Table: "t"}},
+		nil,
 	},
 
 	/////////////////////////////////////////////////////////////////////
@@ -606,6 +616,7 @@ var parseQueryTests = []struct {
 		"delete from t where id in (?+)",
 		"DELETE t",
 		[]queryProto.Table{{Db: "", Table: "t"}},
+		nil,
 	},
 
 	/////////////////////////////////////////////////////////////////////
@@ -614,6 +625,7 @@ var parseQueryTests = []struct {
 		"show status like ?",
 		"SHOW STATUS",
 		nil,
+		nil,
 	},
 
 	/////////////////////////////////////////////////////////////////////
@@ -621,6 +633,7 @@ var parseQueryTests = []struct {
 		"REPLACE INTO my_table (a,b,c) VALUES (1, 2, 3)",
 		"REPLACE my_table",
 		[]queryProto.Table{{Db: "", Table: "my_table"}},
+		nil,
 	},
 	{ // #12
 		"OPTIMIZE TABLE `o2408`.`agent_log`",
@@ -628,6 +641,7 @@ var parseQueryTests = []struct {
 		[]queryProto.Table{
 			{Db: "o2408", Table: "agent_log"},
 		},
+		nil,
 	},
 	{ // #13
 		"select c from t1 join t2 using (c) where id=?",
@@ -636,6 +650,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "t1"},
 			{Db: "", Table: "t2"},
 		},
+		nil,
 	},
 	{ // #14
 		"insert into data values (...)",
@@ -643,11 +658,15 @@ var parseQueryTests = []struct {
 		[]queryProto.Table{
 			{Db: "", Table: "data"},
 		},
+		nil,
 	},
 	{ // #15
 		"call\n pita(?)",
 		"CALL pita",
 		nil,
+		[]queryProto.Procedure{
+			{DB: "", Name: "pita"},
+		},
 	},
 	{ // #16 exceeds MAX_JOIN_DEPTH
 		"select c from a" +
@@ -670,16 +689,19 @@ var parseQueryTests = []struct {
 			{"", "v"}, {"", "w"}, {"", "x"}, {"", "y"},
 			{"", "z"},
 		},
+		nil,
 	},
 	{ // #17
 		"SELECT DISTINCT c\n FROM sbtest1\nWHERE id\nBETWEEN 1\nAND 100\nORDER BY  c\n",
 		"SELECT sbtest1",
 		[]queryProto.Table{{Db: "", Table: "sbtest1"}},
+		nil,
 	},
 	{ // #18
 		"SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN 1 AND 100 ORDER BY c",
 		"SELECT sbtest2",
 		[]queryProto.Table{{Db: "", Table: "sbtest2"}},
+		nil,
 	},
 	// Don't remove the ; at the end of the next query.
 	// There was an error in the past where a ; at the end was making the
@@ -688,10 +710,12 @@ var parseQueryTests = []struct {
 		"SELECT * from `sysbenchtest`.`t6002_0`;",
 		"SELECT sysbenchtest.t6002_0",
 		[]queryProto.Table{{Db: "sysbenchtest", Table: "t6002_0"}},
+		nil,
 	},
 	{ // #20
 		"use zapp",
 		"USE",
+		nil,
 		nil,
 	},
 	// Schema was set as default from the previous USE
@@ -699,32 +723,38 @@ var parseQueryTests = []struct {
 		"SELECT * from `t6003_0`;",
 		"SELECT t6003_0",
 		[]queryProto.Table{{Db: "", Table: "t6003_0"}},
+		nil,
 	},
 	{ // #22
 		"CREATE TABLE t6004 (PRIMARY KEY id int, a varchar(25)) engine=innodb",
 		"CREATE TABLE t6004",
 		[]queryProto.Table{{Db: "", Table: "t6004"}},
+		nil,
 	},
 	{ // #23
 		"ALTER TABLE sakila.actor ADD COLUMN newcol int",
 		"ALTER TABLE sakila.actor",
 		[]queryProto.Table{{Db: "sakila", Table: "actor"}},
+		nil,
 	},
 	// Db & Table are empty because CREATE DATABASE is not yet supported by Vitess.sqlparser
 	{ // #24
 		"CREATE DATABASE ssm",
 		"CREATE DATABASE ssm",
 		nil,
+		nil,
 	},
 	{ // #25
 		"create index idx ON percona (f1)",
 		"ALTER TABLE percona",
 		[]queryProto.Table{{Db: "", Table: "percona"}},
+		nil,
 	},
 	{ // #26 override the default USE
 		"create index idx ON brannigan.percona (f1)",
 		"ALTER TABLE brannigan.percona",
 		[]queryProto.Table{{Db: "brannigan", Table: "percona"}},
+		nil,
 	},
 	// PMM-1892. Upgraded Vitess libraries to support this query.
 	// Notice that the query below is not exactly the same reported in the ticket; this
@@ -743,10 +773,12 @@ var parseQueryTests = []struct {
 			{Db: "information_schema", Table: "tables"},
 			{Db: "information_schema", Table: "columns"},
 		},
+		nil,
 	},
 	{ // #28
 		"SELECT @@`version`",
 		"SELECT",
+		nil,
 		nil,
 	},
 	{ // #29
@@ -756,6 +788,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "test1"},
 			{Db: "", Table: "test2"},
 		},
+		nil,
 	},
 	{ // #30
 		"SELECT t.* FROM (SELECT t1.*, t2.* FROM (SELECT * FROM test1) t1 JOIN (SELECT * FROM test2) t2 ON t1.id1 = t2.id2) t UNION SELECT t.* FROM (SELECT t3.*, t4.* FROM (SELECT * FROM test3) t3 JOIN (SELECT * FROM test4) t4 ON t3.id3 = t4.id4) t",
@@ -766,6 +799,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "test3"},
 			{Db: "", Table: "test4"},
 		},
+		nil,
 	},
 	{ // #31
 		`
@@ -784,6 +818,7 @@ var parseQueryTests = []struct {
 			{Db: "test", Table: "users"},
 			{Db: "test", Table: "wp_users"},
 		},
+		nil,
 	},
 	{ // #32
 		`
@@ -800,6 +835,7 @@ var parseQueryTests = []struct {
 		[]queryProto.Table{
 			{Db: "test", Table: "tmp_t"},
 		},
+		nil,
 	},
 	{ // #33
 		`
@@ -817,6 +853,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "t1"},
 			{Db: "", Table: "t2"},
 		},
+		nil,
 	},
 }
 
@@ -825,11 +862,12 @@ func TestParseQuery(t *testing.T) {
 
 	for i, test := range parseQueryTests {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
-			abstract, tables, _, err := mysqlAnalyzer.ParseQuery(test.query)
+			abstract, tables, procedures, err := mysqlAnalyzer.ParseQuery(test.query)
 			require.Nil(t, err)
 
 			require.Equal(t, test.abstract, abstract)
 			require.Equal(t, test.tables, tables)
+			require.Equal(t, test.procedures, procedures)
 		})
 	}
 }

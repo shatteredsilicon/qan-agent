@@ -102,11 +102,11 @@ func (a *PGAnalyzer) Start() error {
 
 	switch a.config.CollectFrom {
 	case "logfile":
-		a.collector = collector.NewLogFileCollector(a.config.QAN, a.logger, db, a.spool)
+		a.collector = collector.NewLogFileCollector(a.config, a.logger, db, a.spool)
 	case "table":
-		a.collector = collector.NewTableCollector(a.config.QAN, a.logger, db, a.spool)
+		a.collector = collector.NewTableCollector(a.config, a.logger, db, a.spool)
 	case "rds-logfile":
-		a.collector = collector.NewRDSLogFileCollector(a.config.QAN, a.logger, a.spool)
+		a.collector = collector.NewRDSLogFileCollector(a.config, a.logger, db, a.spool)
 	default:
 		return errors.New("unspported CollectFrom option")
 	}

@@ -33,9 +33,9 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/test"
 	"github.com/shatteredsilicon/qan-agent/test/mock"
@@ -804,7 +804,7 @@ func (s *WorkerTestSuite) TestResult014(t *C) {
 		StartOffset: 0,
 		EndOffset:   127118680,
 	}
-	report := report.MakeReport(config, interval.StartTime, interval.StopTime, interval, result, nil, nil)
+	report := report.MakeReport(config, interval.StartTime, interval.StopTime, interval.Handler, result, nil, nil)
 
 	t.Check(report.Global.TotalQueries, Equals, uint(4))
 	t.Check(report.Global.UniqueQueries, Equals, uint(4))

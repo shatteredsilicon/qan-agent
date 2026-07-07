@@ -18,7 +18,7 @@
 package mock
 
 import (
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/log"
 )
 
 type LogParser struct {

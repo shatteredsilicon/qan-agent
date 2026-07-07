@@ -24,8 +24,7 @@ import (
 
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
@@ -56,7 +55,7 @@ func (a ByQueryTime) Less(i, j int) bool {
 func MakeReport(
 	config analyzer.QAN,
 	startTime, endTime time.Time,
-	interval *iter.Interval,
+	intervalHandler func(*qan.Report, int64, uint),
 	result *Result,
 	logger *pct.Logger,
 	prefetchMetadataHandler func(*event.Class) error,
@@ -76,8 +75,10 @@ func MakeReport(
 
 	processedI := 0
 	for ; processedI < len(result.Class) && (config.ReportLimit == 0 || processedI < int(config.ReportLimit)); processedI++ {
-		if err := prefetchMetadataHandler(result.Class[processedI]); err != nil {
-			logger.Error("got an error when prefetching metadata:", err)
+		if prefetchMetadataHandler != nil {
+			if err := prefetchMetadataHandler(result.Class[processedI]); err != nil {
+				logger.Error("got an error when prefetching metadata:", err)
+			}
 		}
 
 		report.Class[processedI] = result.Class[processedI].Class
@@ -105,19 +106,8 @@ func MakeReport(
 		report.Class = append(report.Class, lrq.Class)
 	}
 
-	if interval != nil {
-		size, err := pct.FileSize(interval.Filename)
-		if err != nil {
-			size = 0
-		}
-
-		// slow log data
-		report.SlowLogFile = interval.Filename
-		report.SlowLogFileSize = size
-		report.StartOffset = interval.StartOffset
-		report.EndOffset = interval.EndOffset
-		report.StopOffset = result.StopOffset
-		report.RateLimit = result.RateLimit
+	if intervalHandler != nil {
+		intervalHandler(report, result.StopOffset, result.RateLimit)
 	}
 
 	return report

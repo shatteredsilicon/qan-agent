@@ -36,6 +36,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
 	mysqlEvent "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
@@ -499,7 +500,7 @@ func (w *Worker) runFiles(rdsLogFilePath string) (*report.Result, bool, error) {
 
 		// The aggregator result is a map, but we need an array of classes for
 		// the query report, so convert it.
-		classes := make([]*mysqlEvent.Class, 0)
+		classes := make([]*event.Class, 0)
 		for _, cs := range r.Class {
 			for _, c := range cs {
 				classes = append(classes, c)

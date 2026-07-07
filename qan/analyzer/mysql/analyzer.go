@@ -33,7 +33,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	mysqlUtil "github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/util"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker"
@@ -561,7 +561,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 				continue
 			}
 
-			resp := report.MakeReport(a.config, res.StartTime, res.EndTime, interval, res, a.logger, a.prefetchMetadata)
+			resp := report.MakeReport(a.config, res.StartTime, res.EndTime, interval.Handler, res, a.logger, a.prefetchMetadata)
 			if err := a.spool.Write("qan", resp); err != nil {
 				a.logger.Warn("Lost report:", err)
 			}
@@ -582,7 +582,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 
 		// Translate the results into a report and spool.
 		// NOTE: "qan" here is correct; do not use a.name.
-		report := report.MakeReport(a.config, interval.StartTime, interval.StopTime, interval, result, a.logger, a.prefetchMetadata)
+		report := report.MakeReport(a.config, interval.StartTime, interval.StopTime, interval.Handler, result, a.logger, a.prefetchMetadata)
 		if err := a.spool.Write("qan", report); err != nil {
 			a.logger.Warn("Lost report:", err)
 		}
