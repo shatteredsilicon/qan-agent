@@ -45,7 +45,8 @@ type QueryInfoParam struct {
 	QueryExample string
 }
 
-func GetQueryInfo(db *sql.DB, param *QueryInfoParam) (*QueryInfoResult, error) {
+// GetQueryInfo fills up guessed schemas and returns query info
+func GetQueryInfo(db *sql.DB, param *QueryInfoParam, cachedCheck func(string) bool) (*QueryInfoResult, error) {
 	res := make(map[string]*QueryInfo)
 	guessMap := make(map[string]proto.GuessDB)
 	var err error
@@ -61,6 +62,30 @@ func GetQueryInfo(db *sql.DB, param *QueryInfoParam) (*QueryInfoResult, error) {
 		if err = tableinfo.GuessAndFillSchemas(db, tableQuery); err != nil {
 			return nil, err
 		}
+
+		var createParams []tableinfo.TableParam
+		for i := range tableQuery.Create {
+			if cachedCheck == nil || !cachedCheck(fmt.Sprintf("%s.%s", tableQuery.Create[i].Db, tableQuery.Create[i].Table)) {
+				createParams = append(createParams, tableQuery.Create[i])
+			}
+		}
+		tableQuery.Create = createParams
+
+		var indexParams []tableinfo.TableParam
+		for i := range tableQuery.Index {
+			if cachedCheck == nil || !cachedCheck(fmt.Sprintf("%s.%s", tableQuery.Index[i].Db, tableQuery.Index[i].Table)) {
+				indexParams = append(indexParams, tableQuery.Index[i])
+			}
+		}
+		tableQuery.Index = indexParams
+
+		var statusParams []tableinfo.TableParam
+		for i := range tableQuery.Status {
+			if cachedCheck == nil || !cachedCheck(fmt.Sprintf("%s.%s", tableQuery.Status[i].Db, tableQuery.Status[i].Table)) {
+				statusParams = append(statusParams, tableQuery.Status[i])
+			}
+		}
+		tableQuery.Status = statusParams
 
 		tableRes, err := tableinfo.GetTableInfo(db, tableQuery)
 		if err != nil {
@@ -96,6 +121,7 @@ func GetQueryInfo(db *sql.DB, param *QueryInfoParam) (*QueryInfoResult, error) {
 		}
 
 		if len(guessMap) > 0 {
+			procedureIdx := 0
 			for i := range param.Procedure {
 				if len(param.Procedure[i].DB) > 0 {
 					continue
@@ -104,7 +130,12 @@ func GetQueryInfo(db *sql.DB, param *QueryInfoParam) (*QueryInfoResult, error) {
 					param.Procedure[i].DB = guessSchema.DB
 					param.Procedure[i].GuessSchema = &guessSchema
 				}
+				if cachedCheck == nil || !cachedCheck(fmt.Sprintf("%s.%s", param.Procedure[i].DB, param.Procedure[i].Name)) {
+					param.Procedure[procedureIdx] = param.Procedure[i]
+					procedureIdx++
+				}
 			}
+			param.Procedure = param.Procedure[:procedureIdx]
 		}
 
 		for _, p := range param.Procedure {

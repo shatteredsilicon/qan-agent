@@ -51,6 +51,7 @@ type AnalyzerTestSuite struct {
 	nullmysql     *mock.NullMySQL
 	iter          *interval_iter.Iter
 	spool         *mock.Spooler
+	cache         *mock.Cacher
 	clock         *mock.Clock
 	api           *mock.API
 	worker        *qan_worker.QanWorker
@@ -168,6 +169,7 @@ func (s *AnalyzerTestSuite) TestRunMockWorker(t *C) {
 		s.worker,
 		s.clock,
 		s.spool,
+		s.cache,
 	)
 
 	err := a.Start()
@@ -230,6 +232,7 @@ func (s *AnalyzerTestSuite) TestStartServiceFast(t *C) {
 		s.worker,
 		s.clock,
 		s.spool,
+		s.cache,
 	)
 	err := a.Start()
 	t.Assert(err, IsNil)
@@ -268,6 +271,7 @@ func (s *AnalyzerTestSuite) TestMySQLRestart(t *C) {
 		s.worker,
 		s.clock,
 		s.spool,
+		s.cache,
 	)
 	err := a.Start()
 	t.Assert(err, IsNil)
@@ -360,6 +364,7 @@ func (s *AnalyzerTestSuite) TestRealSlowLogWorker(t *C) {
 		worker,
 		s.clock,
 		s.spool,
+		s.cache,
 	)
 	err := a.Start()
 	t.Assert(err, IsNil)
@@ -398,6 +403,7 @@ func (s *AnalyzerTestSuite) TestRecoverWorkerPanic(t *C) {
 		s.worker,
 		s.clock,
 		s.spool,
+		s.cache,
 	)
 
 	err := a.Start()
@@ -475,6 +481,7 @@ func (s *AnalyzerTestSuite) TestNoSlowLogTakeOver(t *C) {
 		s.worker,
 		s.clock,
 		s.spool,
+		s.cache,
 	)
 
 	err := a.Start()
@@ -507,6 +514,7 @@ func (s *AnalyzerTestSuite) TestSlowLogTakeOver(t *C) {
 		s.worker,
 		s.clock,
 		s.spool,
+		s.cache,
 	)
 
 	err := a.Start()

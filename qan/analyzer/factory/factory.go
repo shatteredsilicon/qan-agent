@@ -45,6 +45,7 @@ func (u UnknownTypeError) Error() string {
 type Factory struct {
 	logChan      chan proto.LogEntry
 	spool        data.Spooler
+	cache        data.Cacher
 	clock        ticker.Manager
 	mrms         mrms.Monitor
 	instanceRepo *instance.Repo
@@ -53,6 +54,7 @@ type Factory struct {
 func New(
 	logChan chan proto.LogEntry,
 	spool data.Spooler,
+	cache data.Cacher,
 	clock ticker.Manager,
 	mrms mrms.Monitor,
 	instanceRepo *instance.Repo,
@@ -60,6 +62,7 @@ func New(
 	f := &Factory{
 		logChan:      logChan,
 		spool:        spool,
+		cache:        cache,
 		clock:        clock,
 		mrms:         mrms,
 		instanceRepo: instanceRepo,
@@ -75,6 +78,7 @@ func (f *Factory) Make(analyzerType, analyzerName string, protoInstance proto.In
 	ctx = context.WithValue(ctx, "services", map[string]interface{}{
 		"logger": logger,
 		"spool":  f.spool,
+		"cache":  f.cache,
 		"clock":  f.clock,
 		"mrms":   f.mrms,
 	})

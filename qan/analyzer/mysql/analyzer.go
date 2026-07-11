@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"regexp"
 	"runtime/debug"
@@ -65,6 +66,7 @@ type RealAnalyzer struct {
 	worker    worker.Worker
 	clock     ticker.Manager
 	spool     data.Spooler
+	cache     data.Cacher
 	// --
 	name                string
 	mysqlConfiguredChan chan bool
@@ -87,6 +89,7 @@ func NewRealAnalyzer(
 	worker worker.Worker,
 	clock ticker.Manager,
 	spool data.Spooler,
+	cache data.Cacher,
 ) *RealAnalyzer {
 	// Create what we need
 	name := logger.Service()
@@ -101,6 +104,7 @@ func NewRealAnalyzer(
 		worker:    worker,
 		clock:     clock,
 		spool:     spool,
+		cache:     cache,
 		// --
 		name:                name,
 		mysqlConfiguredChan: make(chan bool), // note: this channel can't be buffered
@@ -616,19 +620,44 @@ func (a *RealAnalyzer) prefetchMetadata(class *event.Class) error {
 	}
 	q.Procedure = procedures
 
-	queryInfo, err := queryinfo.QueryInfo(a.mysqlConn, &q)
+	queryInfo, err := queryinfo.QueryInfo(a.mysqlConn, &q, a.cachedCheck)
 	if err != nil {
 		return err
 	}
 
-	if queryInfo == nil || queryInfo.Info == nil {
-		return err
+	ids := make(map[string]struct{})
+	for _, t := range q.Table {
+		ids[fmt.Sprintf("%s.%s", t.Db, t.Table)] = struct{}{}
+	}
+	for _, p := range q.Procedure {
+		ids[fmt.Sprintf("%s.%s", p.DB, p.Name)] = struct{}{}
 	}
 
 	var tMetadata []qan.TableMetadata
 	var vmetadata []qan.TableMetadata
 	var pMetadata []qan.ProcedureMetadata
-	for id, info := range queryInfo.Info {
+	for id := range ids {
+		var info *proto.QueryInfo
+		if queryInfo != nil && queryInfo.Info != nil {
+			info = queryInfo.Info[id]
+		}
+
+		cacheKey := a.cache.CacheKey(a.config.UUID, id)
+		if info != nil {
+			err = a.cache.Write(cacheKey, info)
+		} else {
+			bytes, err := a.cache.Read(cacheKey)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if len(bytes) == 0 {
+				continue
+			}
+			if err = json.Unmarshal(bytes, &info); err != nil {
+				return err
+			}
+		}
+
 		dbAndName := strings.SplitN(id, ".", 2)
 		db, name := "", dbAndName[len(dbAndName)-1]
 		if len(dbAndName) == 2 {
@@ -753,6 +782,10 @@ func (a *RealAnalyzer) addVisualExplain(explains *proto.ExplainResult) error {
 	}
 	explains.Visual = string(out)
 	return nil
+}
+
+func (a *RealAnalyzer) cachedCheck(id string) bool {
+	return a.cache.Has(a.cache.CacheKey(a.config.UUID, id))
 }
 
 func walkTableNameNode(node sqlparser.SQLNode) (ts []queryProto.Table) {

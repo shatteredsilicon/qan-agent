@@ -44,6 +44,7 @@ func TestFactory_MakeMongo(t *testing.T) {
 	logChan := make(chan proto.LogEntry)
 	dataChan := make(chan interface{})
 	spool := mock.NewSpooler(dataChan)
+	cache := mock.NewCacher(nil)
 	clock := mock.NewClock()
 	mrm := mock.NewMrmsMonitor()
 	logger := pct.NewLogger(logChan, "TestFactory_Make")
@@ -53,6 +54,7 @@ func TestFactory_MakeMongo(t *testing.T) {
 	factory := New(
 		logChan,
 		spool,
+		cache,
 		clock,
 		mrm,
 		instanceRepo,
@@ -122,6 +124,7 @@ func TestFactory_MakeMySQL(t *testing.T) {
 	logChan := make(chan proto.LogEntry)
 	dataChan := make(chan interface{})
 	spool := mock.NewSpooler(dataChan)
+	cache := mock.NewCacher(nil)
 	clock := mock.NewClock()
 	mrm := mock.NewMrmsMonitor()
 	logger := pct.NewLogger(logChan, "TestFactory_Make")
@@ -131,6 +134,7 @@ func TestFactory_MakeMySQL(t *testing.T) {
 	factory := New(
 		logChan,
 		spool,
+		cache,
 		clock,
 		mrm,
 		instanceRepo,

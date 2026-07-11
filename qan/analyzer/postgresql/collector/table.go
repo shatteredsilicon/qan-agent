@@ -49,18 +49,20 @@ type TableCollector struct {
 	logger         *pct.Logger
 	db             *sql.DB
 	spooler        data.Spooler
+	cache          data.Cacher
 	statements     map[string]statement // keyed on classId
 	examples       map[int64]*exampleRow
 	examplesByHash map[string]*exampleRow
 	exampleTicker  *time.Ticker
 }
 
-func NewTableCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler) *TableCollector {
+func NewTableCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler, cache data.Cacher) *TableCollector {
 	return &TableCollector{
 		config:         config,
 		db:             db,
 		logger:         logger,
 		spooler:        spooler,
+		cache:          cache,
 		statements:     make(map[string]statement),
 		examples:       make(map[int64]*exampleRow),
 		examplesByHash: make(map[string]*exampleRow),
@@ -295,7 +297,7 @@ func (c *TableCollector) Start(ctx context.Context) {
 			Class: classes,
 		},
 		c.logger,
-		pretchDataHandler(c.config, c.db),
+		pretchDataHandler(c.config, c.db, c.cache),
 	)
 	if err := c.spooler.Write("qan", report); err != nil {
 		c.logger.Warn("Lost report: ", err)

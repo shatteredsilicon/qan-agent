@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
 	pg_query "github.com/pganalyze/pg_query_go/v6"
+	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/postgresql/explain"
@@ -27,7 +29,9 @@ type Collector interface {
 	Stop()
 }
 
-func pretchDataHandler(config analyzer.QAN, db *sql.DB) func(*event.Class) error {
+func pretchDataHandler(config analyzer.QAN, db *sql.DB, cache data.Cacher) func(*event.Class) error {
+	cachedCheck := func(key string) bool { return cache.Has(cache.CacheKey(config.UUID, key)) }
+
 	return func(class *event.Class) error {
 		if !util.ValueOf(config.PrefetchMetadata) {
 			return nil
@@ -53,22 +57,43 @@ func pretchDataHandler(config analyzer.QAN, db *sql.DB) func(*event.Class) error
 			q.Procedure = append(q.Procedure, queryinfo.ProcedureParam{DB: procedure.DB, Name: procedure.Name})
 		}
 
-		queryInfo, err := queryinfo.GetQueryInfo(db, &q)
+		queryInfo, err := queryinfo.GetQueryInfo(db, &q, cachedCheck)
 		if err != nil {
 			return err
 		}
 
-		if queryInfo == nil || queryInfo.Info == nil {
-			return err
+		ids := make(map[string]struct{})
+		for _, t := range q.Table {
+			ids[fmt.Sprintf("%s.%s", t.Db, t.Table)] = struct{}{}
+		}
+		for _, p := range q.Procedure {
+			ids[fmt.Sprintf("%s.%s", p.DB, p.Name)] = struct{}{}
 		}
 
 		var tMetadata []qan.TableMetadata
 		var vmetadata []qan.TableMetadata
 		var pMetadata []qan.ProcedureMetadata
 		guessedSchemas := make(map[string]string)
-		for id, info := range queryInfo.Info {
-			if info == nil {
-				continue
+		for id := range ids {
+			var info *queryinfo.QueryInfo
+			if queryInfo != nil && queryInfo.Info != nil {
+				info = queryInfo.Info[id]
+			}
+
+			cacheKey := cache.CacheKey(config.UUID, id)
+			if info != nil {
+				err = cache.Write(cacheKey, info)
+			} else {
+				bytes, err := cache.Read(cacheKey)
+				if err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				if len(bytes) == 0 {
+					continue
+				}
+				if err = json.Unmarshal(bytes, &info); err != nil {
+					return err
+				}
 			}
 
 			dbAndName := strings.SplitN(id, ".", 2)
@@ -116,7 +141,7 @@ func pretchDataHandler(config analyzer.QAN, db *sql.DB) func(*event.Class) error
 			}
 		}
 
-		if class.Example == nil || class.Example.Query == "" {
+		if class.Example == nil || class.Example.Query == "" || queryInfo.SkipExplain {
 			return nil
 		}
 

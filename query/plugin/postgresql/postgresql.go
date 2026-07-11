@@ -111,7 +111,7 @@ func (m *PostgreSQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, 
 	}
 	defer db.Close()
 
-	return queryinfo.GetQueryInfo(db, param)
+	return queryinfo.GetQueryInfo(db, param, nil)
 }
 
 // FixDSN adds default 'postgresql://' scheme to dsn

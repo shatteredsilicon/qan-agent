@@ -63,16 +63,18 @@ type LogFileCollector struct {
 	logger              *pct.Logger
 	db                  *sql.DB
 	spooler             data.Spooler
+	cache               data.Cacher
 	files               map[string]logFileRecord
 	modTimeOfLatestFile time.Time
 }
 
-func NewLogFileCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler) *LogFileCollector {
+func NewLogFileCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler, cache data.Cacher) *LogFileCollector {
 	return &LogFileCollector{
 		config:  config,
 		db:      db,
 		logger:  logger,
 		spooler: spooler,
+		cache:   cache,
 		files:   make(map[string]logFileRecord),
 	}
 }
@@ -126,7 +128,7 @@ func (c *LogFileCollector) Start(ctx context.Context) {
 				return
 			}
 
-			report := report.MakeReport(c.config, startTime, now, nil, result, c.logger, pretchDataHandler(c.config, c.db))
+			report := report.MakeReport(c.config, startTime, now, nil, result, c.logger, pretchDataHandler(c.config, c.db, c.cache))
 			ag = aggregator.NewAggregator(true)
 			startTime = time.Now()
 			if err := c.spooler.Write("qan", report); err != nil {

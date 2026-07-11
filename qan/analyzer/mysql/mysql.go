@@ -29,6 +29,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 	logger, _ := services["logger"].(*pct.Logger)
 	clock, _ := services["clock"].(ticker.Manager)
 	spool, _ := services["spool"].(data.Spooler)
+	cache, _ := services["cache"].(data.Cacher)
 	mrms, _ := services["mrms"].(mrms.Monitor)
 
 	// Create internal services we need
@@ -49,6 +50,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 		logger:                  logger,
 		clock:                   clock,
 		spool:                   spool,
+		cache:                   cache,
 		mrms:                    mrms,
 		iterFactory:             iterFactory,
 		slowlogWorkerFactory:    slowlogWorkerFactory,
@@ -69,6 +71,7 @@ type MySQLAnalyzer struct {
 	logger                  *pct.Logger
 	clock                   ticker.Manager
 	spool                   data.Spooler
+	cache                   data.Cacher
 	mrms                    mrms.Monitor
 	iterFactory             iter.IntervalIterFactory
 	slowlogWorkerFactory    slowlog.WorkerFactory
@@ -147,6 +150,7 @@ func (m *MySQLAnalyzer) Start() error {
 		worker,
 		m.clock,
 		m.spool,
+		m.cache,
 	)
 
 	return m.analyzer.Start()

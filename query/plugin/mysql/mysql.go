@@ -111,7 +111,7 @@ func (m *MySQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error
 		return nil, err
 	}
 
-	return queryinfo.QueryInfo(conn, param)
+	return queryinfo.QueryInfo(conn, param, nil)
 }
 
 func (m *MySQL) summary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {

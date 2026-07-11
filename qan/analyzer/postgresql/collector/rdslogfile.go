@@ -39,6 +39,7 @@ type RDSLogFileCollector struct {
 	logger                           *pct.Logger
 	db                               *sql.DB
 	spooler                          data.Spooler
+	cache                            data.Cacher
 	records                          map[string]*rdsLogFileRecord
 	rds                              *rds.Service
 	lastRDSLogWritten                *int64
@@ -47,12 +48,13 @@ type RDSLogFileCollector struct {
 	rateLimitTimestamps              []time.Time // stores the timestamps when the historical rate limit happened
 }
 
-func NewRDSLogFileCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler) *RDSLogFileCollector {
+func NewRDSLogFileCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler, cache data.Cacher) *RDSLogFileCollector {
 	return &RDSLogFileCollector{
 		config:  config,
 		logger:  logger,
 		db:      db,
 		spooler: spooler,
+		cache:   cache,
 		records: make(map[string]*rdsLogFileRecord),
 	}
 }
@@ -155,7 +157,7 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 				return
 			}
 
-			report := report.MakeReport(c.config, startTime, now, nil, result, c.logger, pretchDataHandler(c.config, c.db))
+			report := report.MakeReport(c.config, startTime, now, nil, result, c.logger, pretchDataHandler(c.config, c.db, c.cache))
 			ag = aggregator.NewAggregator(true)
 			startTime = time.Now()
 			if err := c.spooler.Write("qan", report); err != nil {

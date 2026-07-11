@@ -248,6 +248,9 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 		if err := pct.Basedir.RemoveConfig(configName(uuid)); err != nil {
 			errs = append(errs, err)
 		}
+		if err := pct.Basedir.RemoveCache(uuid); err != nil {
+			errs = append(errs, err)
+		}
 
 		if cmdData.SoftRemove {
 			m.instanceRepo.SoftRemove(uuid)

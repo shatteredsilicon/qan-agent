@@ -282,6 +282,7 @@ func run(agentConfig *agent.AgentConfig) error {
 		pct.NewLogger(logChan, "data"),
 		pct.Basedir.Dir("data"),
 		pct.Basedir.Dir("trash"),
+		pct.Basedir.Dir("cache"),
 		hostname,
 		dataClient,
 		sigChan,
@@ -306,6 +307,7 @@ func run(agentConfig *agent.AgentConfig) error {
 		qanAnalyzerFactory.New(
 			logChan,
 			dataManager.Spooler(),
+			dataManager.Cacher(),
 			clock,
 			mrmsMonitor,
 			itManager.Repo(),
