@@ -33,7 +33,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/test/mock"
@@ -147,7 +147,7 @@ func loadResult(file string, got *report.Result) (*report.Result, error) {
 }
 
 func makeGetRowsFunc(iters [][]*DigestRow) GetDigestRowsFunc {
-	return func(c chan<- *DigestRow, lastFetchSeconds float64, done chan<- error) error {
+	return func(_ mysql.Connector, c chan<- *DigestRow, lastFetchSeconds float64, done chan<- error) error {
 		if len(iters) == 0 {
 			return fmt.Errorf("No more iters")
 		}
@@ -191,17 +191,17 @@ func test001(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 	rows, err := loadData("001")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows, nil)
+	w := NewWorker(logger, getRows, nil)
 
 	// First run doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err := w.Run()
+	res, err := w.Run(nullmysql)
 	require.NoError(t, err)
 	assert.Nil(t, res)
 
@@ -213,10 +213,10 @@ func test001(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    2,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(nullmysql)
 	require.NoError(t, err)
 	normalizeResult(res)
 	expect, err := loadResult("001/res01.json", res)
@@ -239,17 +239,17 @@ func test002(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 	rows, err := loadData("002")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows, nil)
+	w := NewWorker(logger, getRows, nil)
 
 	// First run doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err := w.Run()
+	res, err := w.Run(nullmysql)
 	require.NoError(t, err)
 	assert.Nil(t, res)
 
@@ -261,10 +261,10 @@ func test002(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    2,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(nullmysql)
 	require.NoError(t, err)
 	normalizeResult(res)
 	expect, err := loadResult("002/res01.json", res)
@@ -284,17 +284,17 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 	rows, err := loadData("003")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows, nil)
+	w := NewWorker(logger, getRows, nil)
 
 	// First interval doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err := w.Run()
+	res, err := w.Run(nullmysql)
 	require.NoError(t, err)
 	assert.Nil(t, res)
 
@@ -306,10 +306,10 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    2,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(nullmysql)
 	require.NoError(t, err)
 	normalizeResult(res)
 	expect, err := loadResult("003/res02.json", res)
@@ -324,10 +324,10 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    3,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(nullmysql)
 	require.NoError(t, err)
 	normalizeResult(res)
 	expect, err = loadResult("003/res03.json", res)
@@ -342,10 +342,10 @@ func test003(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    4,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(nullmysql)
 	require.NoError(t, err)
 	normalizeResult(res)
 	expect, err = loadResult("003/res04.json", res)
@@ -363,17 +363,17 @@ func test004EmptyDigest(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMy
 	rows, err := loadData("004")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows, nil)
+	w := NewWorker(logger, getRows, nil)
 
 	// First run doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err := w.Run()
+	res, err := w.Run(nullmysql)
 	require.NoError(t, err)
 	assert.Nil(t, res)
 
@@ -391,17 +391,17 @@ func test005(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 	rows, err := loadData("005")
 	require.NoError(t, err)
 	getRows := makeGetRowsFunc(rows)
-	w := NewWorker(logger, nullmysql, getRows, nil)
+	w := NewWorker(logger, getRows, nil)
 
 	// First interval doesn't produce a result because 2 snapshots are required.
 	i := &iter.Interval{
 		Number:    1,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err := w.Run()
+	res, err := w.Run(nullmysql)
 	require.NoError(t, err)
 	assert.Nil(t, res)
 
@@ -413,10 +413,10 @@ func test005(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    2,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(nullmysql)
 	require.NoError(t, err)
 	normalizeResult(res)
 	expect, err := loadResult("005/res01.json", res)
@@ -431,10 +431,10 @@ func test005(t *testing.T, logger *pct.Logger, nullmysql *mock.NullMySQL) {
 		Number:    3,
 		StartTime: time.Now().UTC(),
 	}
-	err = w.Setup(i, nil)
+	err = w.Setup(nullmysql, i, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(nullmysql)
 	require.NoError(t, err)
 	normalizeResult(res)
 	expect, err = loadResult("005/res02.json", res)
@@ -464,7 +464,7 @@ func testRealWorker(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn, analyzer.QAN{})
+	w := f.Make("qan-worker", analyzer.QAN{})
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},
@@ -491,10 +491,10 @@ func testRealWorker(t *testing.T, logger *pct.Logger, dsn string) {
 	_, err = mysqlConn.DB().Exec("SELECT 'teapot' FROM DUAL")
 
 	// First interval.
-	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
+	err = w.Setup(mysqlWorkerConn, &iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
-	res, err := w.Run()
+	res, err := w.Run(mysqlWorkerConn)
 	require.NoError(t, err)
 	assert.Nil(t, res)
 
@@ -506,10 +506,10 @@ func testRealWorker(t *testing.T, logger *pct.Logger, dsn string) {
 	time.Sleep(1 * time.Second)
 
 	// Second interval and a result.
-	err = w.Setup(&iter.Interval{Number: 2, StartTime: time.Now().UTC()}, nil)
+	err = w.Setup(mysqlWorkerConn, &iter.Interval{Number: 2, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(mysqlWorkerConn)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	if len(res.Class) == 0 {
@@ -566,7 +566,7 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn, analyzer.QAN{})
+	w := f.Make("qan-worker", analyzer.QAN{})
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},
@@ -593,10 +593,10 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 	_, err = mysqlConn.DB().Exec("SELECT 'teapot' FROM DUAL")
 
 	// First interval.
-	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
+	err = w.Setup(mysqlWorkerConn, &iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
-	res, err := w.Run()
+	res, err := w.Run(mysqlWorkerConn)
 	require.NoError(t, err)
 	assert.Nil(t, res)
 
@@ -610,10 +610,10 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 	// Simulate the ticker being reset which results in it resetting
 	// its internal interval number, so instead of 2 here we have 1 again.
 	// Second interval and a result.
-	err = w.Setup(&iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
+	err = w.Setup(mysqlWorkerConn, &iter.Interval{Number: 1, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(mysqlWorkerConn)
 	require.NoError(t, err)
 	assert.Nil(t, res) // no result due to out of sequence interval
 
@@ -621,11 +621,11 @@ func testIterOutOfSeq(t *testing.T, logger *pct.Logger, dsn string) {
 	require.NoError(t, err)
 
 	// Simulate normal operation resuming, i.e. interval 2.
-	err = w.Setup(&iter.Interval{Number: 2, StartTime: time.Now().UTC()}, nil)
+	err = w.Setup(mysqlWorkerConn, &iter.Interval{Number: 2, StartTime: time.Now().UTC()}, nil)
 	require.NoError(t, err)
 
 	// Now there should be a result.
-	res, err = w.Run()
+	res, err = w.Run(mysqlWorkerConn)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	if len(res.Class) == 0 {
@@ -654,7 +654,7 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 
 	mysqlWorkerConn := mysql.NewConnection(dsn)
 	f := NewRealWorkerFactory(logger.LogChan())
-	w := f.Make("qan-worker", mysqlWorkerConn, analyzer.QAN{})
+	w := f.Make("qan-worker", analyzer.QAN{})
 
 	start := []mysql.Query{
 		{Verify: "performance_schema", Expect: "1"},
@@ -680,10 +680,10 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 
 	// First interval.
 	now := time.Now().UTC()
-	err = w.Setup(&iter.Interval{Number: 1, StartTime: now}, nil)
+	err = w.Setup(mysqlWorkerConn, &iter.Interval{Number: 1, StartTime: now}, nil)
 	require.NoError(t, err)
 
-	res, err := w.Run()
+	res, err := w.Run(mysqlWorkerConn)
 	require.NoError(t, err)
 	assert.Nil(t, res)
 
@@ -693,10 +693,10 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 	// Simulate the ticker sending a time that's earlier than the previous
 	// tick, which shouldn't happen.
 	now = now.Add(-1 * time.Minute)
-	err = w.Setup(&iter.Interval{Number: 2, StartTime: now}, nil)
+	err = w.Setup(mysqlWorkerConn, &iter.Interval{Number: 2, StartTime: now}, nil)
 	require.NoError(t, err)
 
-	res, err = w.Run()
+	res, err = w.Run(mysqlWorkerConn)
 	require.NoError(t, err)
 	assert.Nil(t, res) // no result due to out of sequence interval
 
@@ -705,11 +705,11 @@ func testIterClockReset(t *testing.T, logger *pct.Logger, dsn string) {
 
 	// Simulate normal operation resuming.
 	now = now.Add(1 * time.Minute)
-	err = w.Setup(&iter.Interval{Number: 3, StartTime: now}, nil)
+	err = w.Setup(mysqlWorkerConn, &iter.Interval{Number: 3, StartTime: now}, nil)
 	require.NoError(t, err)
 
 	// Now there should be a result.
-	res, err = w.Run()
+	res, err = w.Run(mysqlWorkerConn)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	if len(res.Class) == 0 {

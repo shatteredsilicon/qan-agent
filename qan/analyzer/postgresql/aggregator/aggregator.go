@@ -4,7 +4,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/postgresql/logparser"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )
@@ -79,9 +81,9 @@ func (a byQueryTime) Less(i, j int) bool {
 
 // Finalize calculates all metric statistics and returns a Result.
 // Call this function when done adding events to the aggregator.
-func (a *Aggregator) Finalize(config config.QAN, startTime, endTime time.Time) *qan.Report {
+func (a *Aggregator) Finalize(config config.QAN, startTime, endTime time.Time) *report.Result {
 	a.global.UniqueQueries = uint(len(a.classes))
-	cls := make([]*Class, 0)
+	cls := make([]*event.Class, 0)
 	for unixTs, classes := range a.classes {
 		for _, class := range classes {
 			class.StartAt = time.Unix(unixTs, 0)
@@ -94,11 +96,25 @@ func (a *Aggregator) Finalize(config config.QAN, startTime, endTime time.Time) *
 					class.Example.Ts = t.Format("2006-01-02 15:04:05")
 				}
 			}
-			cls = append(cls, class)
+			cls = append(cls, &event.Class{
+				Class: class.Class,
+				Metrics: &event.Metrics{
+					Metrics: class.Metrics.Metrics,
+				},
+			})
 		}
 	}
 
-	return a.MakeReport(config, startTime, endTime, cls, a.global)
+	return &report.Result{
+		RunTime: float64(endTime.Sub(startTime)),
+		Global: &event.Class{
+			Class: a.global.Class,
+			Metrics: &event.Metrics{
+				Metrics: a.global.Metrics.Metrics,
+			},
+		},
+		Class: cls,
+	}
 }
 
 // ShouldFinalize checks whether it should finialize before

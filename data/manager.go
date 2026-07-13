@@ -42,6 +42,7 @@ type Manager struct {
 	logger   *pct.Logger
 	dataDir  string
 	trashDir string
+	cacheDir string
 	hostname string
 	client   pct.WebsocketClient
 	// --
@@ -52,15 +53,17 @@ type Manager struct {
 	sz        proto.Serializer
 	spooler   Spooler
 	sender    *Sender
+	cacher    Cacher
 	status    *pct.Status
 	sigChan   chan os.Signal
 }
 
-func NewManager(logger *pct.Logger, dataDir, trashDir, hostname string, client pct.WebsocketClient, sigChan chan os.Signal) *Manager {
+func NewManager(logger *pct.Logger, dataDir, trashDir, cacheDir, hostname string, client pct.WebsocketClient, sigChan chan os.Signal) *Manager {
 	m := &Manager{
 		logger:   logger,
 		dataDir:  dataDir,
 		trashDir: trashDir,
+		cacheDir: cacheDir,
 		hostname: hostname,
 		client:   client,
 		// --
@@ -96,11 +99,19 @@ func (m *Manager) Start() error {
 	}
 	m.setConfig = set
 
-	// Make data and trash dirs used/shared by all services (mm, qan, etc.).
+	var cc cacheConfig
+	if _, err = pct.Basedir.ReadConfig("cache", &cc); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	// Make data, trash and cache dirs used/shared by all services (mm, qan, etc.).
 	if err := pct.MakeDir(m.dataDir); err != nil {
 		return err
 	}
 	if err := pct.MakeDir(m.trashDir); err != nil {
+		return err
+	}
+	if err := pct.MakeDir(m.cacheDir); err != nil {
 		return err
 	}
 
@@ -124,6 +135,19 @@ func (m *Manager) Start() error {
 		return err
 	}
 	m.spooler = spooler
+
+	m.status.Update("data", "Starting cacher")
+	cacher := NewDiskvCacher(
+		m.cacheDir,
+		cc,
+		pct.NewLogger(m.logger.LogChan(), "data-cacher"),
+		proto.NewJsonSerializer(),
+		m.sigChan,
+	)
+	if err := cacher.Start(); err != nil {
+		return err
+	}
+	m.cacher = cacher
 
 	// Start data sender.
 	m.status.Update("data", "Starting sender")
@@ -173,6 +197,13 @@ func (m *Manager) Start() error {
 				m.status.Update("data", "Restarting sender")
 				if err := senderStart(); err != nil {
 					m.logger.Error("Failed to restart sender after it crashes: ", err)
+					return
+				}
+			case <-cacher.sync.CrashChan:
+				// Restart cacher if it crashes
+				m.status.Update("data", "Restarting cacher")
+				if err := cacher.Start(); err != nil {
+					m.logger.Error("Failed to restart cacher after it crashes: ", err)
 					return
 				}
 			case <-time.After(time.Second):
@@ -258,6 +289,10 @@ func (m *Manager) Spooler() Spooler {
 
 func (m *Manager) Sender() *Sender {
 	return m.sender
+}
+
+func (m *Manager) Cacher() Cacher {
+	return m.cacher
 }
 
 func (m *Manager) validateConfig(config *pc.Data) error {

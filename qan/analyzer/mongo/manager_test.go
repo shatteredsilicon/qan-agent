@@ -29,6 +29,7 @@ func TestRealStartTool(t *testing.T) {
 	logChan := make(chan proto.LogEntry)
 	dataChan := make(chan interface{})
 	spool := mock.NewSpooler(dataChan)
+	cache := mock.NewCacher(nil)
 	clock := mock.NewClock()
 	mrm := mock.NewMrmsMonitor()
 	logger := pct.NewLogger(logChan, "TestRealStartTool")
@@ -38,6 +39,7 @@ func TestRealStartTool(t *testing.T) {
 	f := factory.New(
 		logChan,
 		spool,
+		cache,
 		clock,
 		mrm,
 		instanceRepo,

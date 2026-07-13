@@ -18,14 +18,24 @@
 package mongo
 
 import (
+	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/explain"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/summary"
 	"github.com/shatteredsilicon/ssm/proto"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.mongodb.org/mongo-driver/x/mongo/driver/connstring"
+)
+
+const (
+	MgoTimeoutDialInfo      = 5 * time.Second
+	MgoTimeoutSessionSync   = 5 * time.Second
+	MgoTimeoutSessionSocket = 5 * time.Second
 )
 
 // verify, at compile time, if main struct implements plugin interface
@@ -69,12 +79,17 @@ func execExplain(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
 		return nil, err
 	}
 
-	mongoOpts, err := MongoClientOpts(FixDSN(in.DSN))
+	mongoOpts, err := MongoClientOpts(in.DSN)
 	if err != nil {
 		return nil, err
 	}
 
-	return explain.Explain(mongoOpts, q.Db, q.Query)
+	client, err := mongo.Connect(context.TODO(), mongoOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	return explain.Explain(client, q.Db, q.Query)
 }
 
 func execSummary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
@@ -99,10 +114,22 @@ func FixDSN(dsn string) string {
 
 func MongoClientOpts(dsn string) (*options.ClientOptions, error) {
 	serverAPI := options.ServerAPI(options.ServerAPIVersion1)
-	mongoOpts := options.Client().ApplyURI(dsn).SetServerAPIOptions(serverAPI)
+	mongoOpts := options.Client().ApplyURI(FixDSN(dsn)).SetServerAPIOptions(serverAPI)
 	if mongoOpts.Direct == nil {
 		// default to directConnection=true if it's not set
 		mongoOpts.SetDirect(true)
+	}
+	if mongoOpts.ConnectTimeout == nil {
+		mongoOpts.SetConnectTimeout(MgoTimeoutDialInfo)
+	}
+	if mongoOpts.SocketTimeout == nil {
+		mongoOpts.SetSocketTimeout(MgoTimeoutSessionSocket)
+	}
+	if mongoOpts.Timeout == nil {
+		mongoOpts.SetTimeout(MgoTimeoutSessionSync)
+	}
+	if mongoOpts.ReadPreference == nil {
+		mongoOpts.SetReadPreference(readpref.Nearest())
 	}
 
 	if err := mongoOpts.Validate(); err != nil {

@@ -29,6 +29,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 	logger, _ := services["logger"].(*pct.Logger)
 	clock, _ := services["clock"].(ticker.Manager)
 	spool, _ := services["spool"].(data.Spooler)
+	cache, _ := services["cache"].(data.Cacher)
 	mrms, _ := services["mrms"].(mrms.Monitor)
 
 	// Create internal services we need
@@ -49,6 +50,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 		logger:                  logger,
 		clock:                   clock,
 		spool:                   spool,
+		cache:                   cache,
 		mrms:                    mrms,
 		iterFactory:             iterFactory,
 		slowlogWorkerFactory:    slowlogWorkerFactory,
@@ -69,6 +71,7 @@ type MySQLAnalyzer struct {
 	logger                  *pct.Logger
 	clock                   ticker.Manager
 	spool                   data.Spooler
+	cache                   data.Cacher
 	mrms                    mrms.Monitor
 	iterFactory             iter.IntervalIterFactory
 	slowlogWorkerFactory    slowlog.WorkerFactory
@@ -127,13 +130,13 @@ func (m *MySQLAnalyzer) Start() error {
 	case "slowlog":
 		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn, m.mrms)
 	case "perfschema":
-		worker = m.perfschemaWorkerFactory.Make(name+"-worker", mysqlConn, config)
+		worker = m.perfschemaWorkerFactory.Make(name+"-worker", config)
 	case "rds-slowlog":
 		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
 	default:
 		panic("Invalid analyzerType: " + analyzerType)
 	}
-	worker.SetConfig(config)
+	worker.SetConfig(mysqlConn, config)
 
 	// Create and start a new analyzer. This should return immediately.
 	// The analyzer will configure MySQL, start its iter, then run it worker
@@ -147,6 +150,7 @@ func (m *MySQLAnalyzer) Start() error {
 		worker,
 		m.clock,
 		m.spool,
+		m.cache,
 	)
 
 	return m.analyzer.Start()

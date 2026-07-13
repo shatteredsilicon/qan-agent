@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
-	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/sender"
 )
@@ -23,7 +23,7 @@ func New(
 	mongoOpts *options.ClientOptions,
 	logger *pct.Logger,
 	spool data.Spooler,
-	config pc.QAN,
+	config analyzer.QAN,
 ) *profiler {
 	return &profiler{
 		mongoOpts: mongoOpts,
@@ -38,7 +38,7 @@ type profiler struct {
 	mongoOpts *options.ClientOptions
 	spool     data.Spooler
 	logger    *pct.Logger
-	config    pc.QAN
+	config    analyzer.QAN
 
 	// internal deps
 	monitors   *monitors
@@ -67,7 +67,7 @@ func (self *profiler) Start() (err error) {
 	}
 
 	// create aggregator which collects documents and aggregates them into qan report
-	self.aggregator = aggregator.New(time.Now(), self.config)
+	self.aggregator = aggregator.New(time.Now(), self.config, self.client, self.logger)
 	reportChan := self.aggregator.Start()
 
 	// create sender which sends qan reports and start it
@@ -87,7 +87,7 @@ func (self *profiler) Start() (err error) {
 			self.aggregator,
 			self.logger,
 			self.spool,
-			self.config,
+			self.config.QAN,
 		)
 	}
 
@@ -185,6 +185,8 @@ func (self *profiler) Stop() error {
 	if !self.running {
 		return nil
 	}
+
+	defer self.client.Disconnect(context.TODO())
 
 	// notify goroutine to close
 	close(self.doneChan)

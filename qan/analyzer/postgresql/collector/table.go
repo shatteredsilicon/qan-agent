@@ -9,9 +9,11 @@ import (
 	pg_query "github.com/pganalyze/pg_query_go/v6"
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/postgresql/aggregator"
-	"github.com/shatteredsilicon/ssm/proto/config"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
@@ -43,22 +45,24 @@ type statement struct {
 }
 
 type TableCollector struct {
-	config         config.QAN
+	config         analyzer.QAN
 	logger         *pct.Logger
 	db             *sql.DB
 	spooler        data.Spooler
+	cache          data.Cacher
 	statements     map[string]statement // keyed on classId
 	examples       map[int64]*exampleRow
 	examplesByHash map[string]*exampleRow
 	exampleTicker  *time.Ticker
 }
 
-func NewTableCollector(config config.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler) *TableCollector {
+func NewTableCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler, cache data.Cacher) *TableCollector {
 	return &TableCollector{
 		config:         config,
 		db:             db,
 		logger:         logger,
 		spooler:        spooler,
+		cache:          cache,
 		statements:     make(map[string]statement),
 		examples:       make(map[int64]*exampleRow),
 		examplesByHash: make(map[string]*exampleRow),
@@ -198,7 +202,7 @@ func (c *TableCollector) Start(ctx context.Context) {
 	}
 
 	globalClass := aggregator.NewClass("", "", *c.config.ExampleQueries)
-	classes := make([]*aggregator.Class, 0)
+	classes := make([]*event.Class, 0)
 	for id, s := range statments {
 		preStatement := c.statements[id]
 		var totalRow statmentRow
@@ -270,12 +274,30 @@ func (c *TableCollector) Start(ctx context.Context) {
 		class.TotalQueries = totalRow.Calls
 		class.Metrics = stats
 		class.Class.Metrics = stats.Metrics
-		classes = append(classes, class)
+		classes = append(classes, &event.Class{
+			Class: class.Class,
+			Metrics: &event.Metrics{
+				Metrics: globalClass.Metrics.Metrics,
+			},
+		})
 		globalClass.AddClass(class)
 	}
 
-	report := aggregator.NewAggregator(*c.config.ExampleQueries).MakeReport(
-		c.config, startTime, time.Now(), classes, globalClass,
+	now := time.Now()
+	report := report.MakeReport(
+		c.config, startTime, now, nil,
+		&report.Result{
+			RunTime: float64(now.Sub(startTime)),
+			Global: &event.Class{
+				Class: globalClass.Class,
+				Metrics: &event.Metrics{
+					Metrics: globalClass.Metrics.Metrics,
+				},
+			},
+			Class: classes,
+		},
+		c.logger,
+		pretchDataHandler(c.config, c.db, c.cache),
 	)
 	if err := c.spooler.Write("qan", report); err != nil {
 		c.logger.Warn("Lost report: ", err)

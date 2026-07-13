@@ -35,6 +35,7 @@ const (
 	DATA_DIR     = "data"
 	BIN_DIR      = "bin"
 	TRASH_DIR    = "trash"
+	CACHE_DIR    = "cache"
 	START_LOCK   = "start.lock"
 	START_SCRIPT = "start.sh"
 )
@@ -46,6 +47,7 @@ type basedir struct {
 	dataDir     string
 	binDir      string
 	trashDir    string
+	cacheDir    string
 }
 
 var Basedir basedir
@@ -92,6 +94,11 @@ func (b *basedir) Init(path string) error {
 		return err
 	}
 
+	b.cacheDir = filepath.Join(b.path, CACHE_DIR)
+	if err := MakeDir(b.cacheDir); err != nil && !os.IsExist(err) {
+		return err
+	}
+
 	return nil
 }
 
@@ -111,6 +118,8 @@ func (b *basedir) Dir(service string) string {
 		return b.binDir
 	case "trash":
 		return b.trashDir
+	case "cache":
+		return b.cacheDir
 	default:
 		log.Panic("Invalid service: " + service)
 	}
@@ -164,6 +173,19 @@ func (b *basedir) ReadInstance(uuid string, v interface{}) error {
 // to JSON and store the result in a file with composite name <service>-<uuid>.conf
 func (b *basedir) WriteInstance(uuid string, v interface{}) error {
 	return b.writeFile(b.InstanceFile(uuid), v)
+}
+
+func (b *basedir) RemoveCache(prefix string) error {
+	files, err := filepath.Glob(filepath.Join(b.cacheDir, prefix+"*"))
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if e := os.Remove(file); e != nil {
+			err = e
+		}
+	}
+	return err
 }
 
 // --------------------------------------------------------------------------

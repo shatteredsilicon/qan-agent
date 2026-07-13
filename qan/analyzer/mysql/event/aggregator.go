@@ -33,7 +33,8 @@ package event
 import (
 	"time"
 
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/log"
 )
 
 const (
@@ -44,8 +45,8 @@ const (
 // A Result contains a global class and per-ID classes with finalized metric
 // statistics. The classes are keyed on class ID.
 type Result struct {
-	Global    *Class                      // all classes
-	Class     map[int64]map[string]*Class // keyed on class ID
+	Global    *event.Class                      // all classes
+	Class     map[int64]map[string]*event.Class // keyed on class ID
 	RateLimit uint
 	Error     string
 }
@@ -58,8 +59,8 @@ type Aggregator struct {
 	utcOffset   time.Duration
 	outlierTime float64
 	// --
-	global    *Class
-	classes   map[int64]map[string]*Class
+	global    *event.Class
+	classes   map[int64]map[string]*event.Class
 	rateLimit uint
 	eventSize int64
 }
@@ -72,43 +73,43 @@ func NewAggregator(samples bool, utcOffset time.Duration, outlierTime float64) *
 		utcOffset:   utcOffset,
 		outlierTime: outlierTime,
 		// --
-		global:  NewClass("", "", false),
-		classes: make(map[int64]map[string]*Class),
+		global:  event.NewClass("", "", false),
+		classes: make(map[int64]map[string]*event.Class),
 	}
 	return a
 }
 
 // AddEvent adds the event to the aggregator, automatically creating new classes
 // as needed.
-func (a *Aggregator) AddEvent(event *log.Event, id, fingerprint string) {
-	if a.rateLimit != event.RateLimit {
-		a.rateLimit = event.RateLimit
+func (a *Aggregator) AddEvent(e *log.Event, id, fingerprint string) {
+	if a.rateLimit != e.RateLimit {
+		a.rateLimit = e.RateLimit
 	}
 
-	classes, ok := a.classes[event.Ts.Unix()]
+	classes, ok := a.classes[e.Ts.Unix()]
 	if !ok {
-		classes = make(map[string]*Class)
-		a.classes[event.Ts.Unix()] = classes
+		classes = make(map[string]*event.Class)
+		a.classes[e.Ts.Unix()] = classes
 	}
 
 	outlier := false
-	if a.outlierTime > 0 && event.TimeMetrics["Query_time"] > a.outlierTime {
+	if a.outlierTime > 0 && e.TimeMetrics["Query_time"] > a.outlierTime {
 		outlier = true
 	}
 
 	// We don't need to deal with User@Host for
 	// global class, so make a copy and set Host
 	// to empty
-	globalEvent := *event
+	globalEvent := *e
 	globalEvent.Host = ""
 	a.global.AddEvent(&globalEvent, outlier)
 
 	class, ok := classes[id]
 	if !ok {
-		class = NewClass(id, fingerprint, a.samples)
+		class = event.NewClass(id, fingerprint, a.samples)
 		classes[id] = class
 	}
-	class.AddEvent(event, outlier)
+	class.AddEvent(e, outlier)
 
 	a.eventSize++
 }

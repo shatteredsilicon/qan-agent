@@ -57,6 +57,7 @@ func TestWithRealMySQL(t *testing.T) {
 	logChan := make(chan proto.LogEntry, 1000)
 	dataChan := make(chan interface{})
 	spool := mock.NewSpooler(dataChan)
+	cache := mock.NewCacher(nil)
 	clock := mock.NewClock()
 	mrm := mock.NewMrmsMonitor()
 	logger := pct.NewLogger(logChan, "TestManager_GetDefaults")
@@ -75,6 +76,7 @@ func TestWithRealMySQL(t *testing.T) {
 	analyzerFactory := factory.New(
 		logChan,
 		spool,
+		cache,
 		clock,
 		mrm,
 		instanceRepo,

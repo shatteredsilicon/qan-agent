@@ -54,7 +54,7 @@ type Event struct {
 	User          string
 	Host          string
 	Db            string
-	ExplainRows   []proto.ExplainRow
+	ExplainRows   []*proto.ExplainRow
 	TimeMetrics   map[string]float64 // *_time and *_wait metrics
 	NumberMetrics map[string]uint64  // most metrics
 	BoolMetrics   map[string]bool    // yes/no metrics
@@ -69,19 +69,4 @@ func NewEvent() *Event {
 	event.NumberMetrics = make(map[string]uint64)
 	event.BoolMetrics = make(map[string]bool)
 	return event
-}
-
-// Options encapsulate common options for making a new LogParser.
-type Options struct {
-	StartOffset        uint64          // byte offset in file at which to start parsing
-	FilterAdminCommand map[string]bool // admin commands to ignore
-	Debug              bool            // print trace info to STDOUT
-	DefaultLocation    *time.Location  // DefaultLocation to assume for logs in MySQL < 5.7 format.
-}
-
-// A LogParser sends events to a channel.
-type LogParser interface {
-	Start() error
-	Stop()
-	EventChan() <-chan *Event
 }

@@ -31,11 +31,13 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 	// Get services we need
 	logger, _ := services["logger"].(*pct.Logger)
 	spool, _ := services["spool"].(data.Spooler)
+	cache, _ := services["cache"].(data.Cacher)
 
 	// return initialized MongoAnalyzer
 	return &PGAnalyzer{
 		protoInstance: protoInstance,
 		spool:         spool,
+		cache:         cache,
 		logger:        logger,
 		stopChan:      make(chan struct{}),
 	}
@@ -46,6 +48,7 @@ type PGAnalyzer struct {
 	protoInstance proto.Instance
 	logger        *pct.Logger
 	spool         data.Spooler
+	cache         data.Cacher
 	collector     collector.Collector
 	config        analyzer.QAN
 	db            *sql.DB
@@ -102,11 +105,11 @@ func (a *PGAnalyzer) Start() error {
 
 	switch a.config.CollectFrom {
 	case "logfile":
-		a.collector = collector.NewLogFileCollector(a.config.QAN, a.logger, db, a.spool)
+		a.collector = collector.NewLogFileCollector(a.config, a.logger, db, a.spool, a.cache)
 	case "table":
-		a.collector = collector.NewTableCollector(a.config.QAN, a.logger, db, a.spool)
+		a.collector = collector.NewTableCollector(a.config, a.logger, db, a.spool, a.cache)
 	case "rds-logfile":
-		a.collector = collector.NewRDSLogFileCollector(a.config.QAN, a.logger, a.spool)
+		a.collector = collector.NewRDSLogFileCollector(a.config, a.logger, db, a.spool, a.cache)
 	default:
 		return errors.New("unspported CollectFrom option")
 	}

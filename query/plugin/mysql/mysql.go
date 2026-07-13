@@ -77,7 +77,7 @@ func (m *MySQL) explain(cmd *proto.Cmd, in proto.Instance) (interface{}, error) 
 		return nil, err
 	}
 
-	result, err := explain.Explain(conn, q.Db, q.Query, q.Convert, len(q.WithExplainRows) > 0)
+	result, err := explain.Explain(conn, q.Db, q.Query, len(q.WithExplainRows) > 0)
 	if result != nil && len(q.WithExplainRows) > 0 {
 		result.Classic = q.WithExplainRows
 	}
@@ -111,7 +111,7 @@ func (m *MySQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error
 		return nil, err
 	}
 
-	return queryinfo.QueryInfo(conn, param)
+	return queryinfo.QueryInfo(conn, param, nil)
 }
 
 func (m *MySQL) summary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {

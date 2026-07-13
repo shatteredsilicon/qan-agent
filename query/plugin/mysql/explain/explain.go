@@ -30,10 +30,10 @@ import (
 )
 
 var (
-	unsupportedRegex = regexp.MustCompile(`^(?i)\s*(CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|OPTIMIZE|ANALYZE|EXPLAIN)`)
+	unsupportedRegex = regexp.MustCompile(`^(?i)\s*(CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|OPTIMIZE|ANALYZE|EXPLAIN|REPAIR|CALL)`)
 )
 
-func Explain(c mysql.Connector, db, query string, convert, ignoreClassic bool) (*proto.ExplainResult, error) {
+func Explain(c mysql.Connector, db, query string, ignoreClassic bool) (*proto.ExplainResult, error) {
 	if unsupportedRegex.Match([]byte(query)) {
 		return nil, nil
 	}
@@ -41,28 +41,42 @@ func Explain(c mysql.Connector, db, query string, convert, ignoreClassic bool) (
 	if db != "" && !strings.HasPrefix(db, "`") {
 		db = "`" + db + "`"
 	}
-	explainResult, err := explain(c, db, query, ignoreClassic)
+
+	query = tryConvertToExplainable(query)
+	return explain(c, db, query, ignoreClassic)
+}
+
+func tryConvertToExplainable(query string) string {
+	s, err := sqlparser.NewTestParser().Parse(query)
 	if err != nil {
-		// MySQL 5.5 returns syntax error because it doesn't support non-SELECT EXPLAIN.
-		// MySQL 5.6 non-SELECT EXPLAIN requires privs for the SQL statement.
-		errCode := mysql.MySQLErrorCode(err)
-		if convert && (errCode == mysql.ER_SYNTAX_ERROR || errCode == mysql.ER_USER_DENIED) && isDMLQuery(query) {
-			query = dmlToSelect(query)
-			if query == "" {
-				return nil, fmt.Errorf("cannot convert query to SELECT")
-			}
-			explainResult, err = explain(c, db, query, ignoreClassic) // query converted to SELECT
+		return query
+	}
+
+	switch node := s.(type) {
+	case *sqlparser.Delete: // DELETE statement, try changing it to SELECT statement
+		var newQuery string
+		if len(node.Targets) < 2 {
+			newQuery = fmt.Sprintf("SELECT * FROM %s", sqlparser.SliceString(s.(*sqlparser.Delete).TableExprs))
+		} else {
+			newQuery = fmt.Sprintf("SELECT 1 FROM %s", sqlparser.SliceString(s.(*sqlparser.Delete).TableExprs))
 		}
-		if err != nil {
-			return nil, err
+		if node.Where != nil {
+			newQuery += sqlparser.CanonicalString(node.Where)
+		}
+		return newQuery
+	case *sqlparser.Insert:
+		switch node.Rows.(type) {
+		case *sqlparser.Select: // INSERT INTO ... SELECT statement, try explaining the SELECT part only
+			return sqlparser.String(s.(*sqlparser.Insert).Rows)
 		}
 	}
-	return explainResult, nil
+
+	return query
 }
 
 // --------------------------------------------------------------------------
 
-func explain(c mysql.Connector, db, query string, ignoreClassic bool) (*proto.ExplainResult, error) {
+func explain(c mysql.Connector, db, query string, ignoreClass bool) (*proto.ExplainResult, error) {
 	// Transaction because we need to ensure USE and EXPLAIN are run in one connection
 	tx, err := c.DB().Begin()
 	if err != nil {
@@ -79,58 +93,24 @@ func explain(c mysql.Connector, db, query string, ignoreClassic bool) (*proto.Ex
 		}
 	}
 
-	explain := &proto.ExplainResult{}
-	var originErr error
-	explain.Classic, explain.JSON, originErr = realExplain(c, tx, query, ignoreClassic)
-	if originErr == nil {
-		return explain, nil
-	}
+	result := &proto.ExplainResult{}
 
-	// First try failed, see if this is a query that we can
-	// adjust to make EXPLAIN works
-	s, err := sqlparser.NewTestParser().Parse(query)
-	if err != nil {
-		return nil, originErr
-	}
-
-	var newQuery string
-	switch s.(type) {
-	case *sqlparser.Delete: // DELETE statement, try changing it to SELECT statement
-		if indexes := regexp.MustCompile(`(?i)\sFROM\s`).FindIndex([]byte(query)); len(indexes) > 0 {
-			newQuery = fmt.Sprintf("SELECT * %s", query[indexes[0]:])
-		}
-	case *sqlparser.Insert:
-		switch s.(*sqlparser.Insert).Rows.(type) {
-		case *sqlparser.Select: // INSERT INTO ... SELECT statement, try explaining the SELECT part only
-			newQuery = sqlparser.String(s.(*sqlparser.Insert).Rows)
+	if !ignoreClass {
+		result.Classic, err = classicExplain(tx, query)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	if newQuery == "" {
-		return nil, originErr
-	}
-
-	explain.Classic, explain.JSON, err = realExplain(c, tx, newQuery, ignoreClassic)
+	result.JSON, err = jsonExplain(c, tx, query)
 	if err != nil {
 		return nil, err
 	}
 
-	return explain, nil
+	return result, nil
 }
 
-func realExplain(c mysql.Connector, tx *sql.Tx, query string, ignoreClassic bool) (classic []*proto.ExplainRow, json string, err error) {
-	if !ignoreClassic {
-		classic, err = classicExplain(c, tx, query)
-		if err != nil {
-			return nil, "", err
-		}
-	}
-
-	json, err = jsonExplain(c, tx, query)
-	return classic, json, err
-}
-
-func classicExplain(c mysql.Connector, tx *sql.Tx, query string) (classicExplain []*proto.ExplainRow, err error) {
+func classicExplain(tx *sql.Tx, query string) (classicExplain []*proto.ExplainRow, err error) {
 	// Partitions are introduced since MySQL 5.1
 	// We can simply run EXPLAIN /*!50100 PARTITIONS*/ to get this column when it's available
 	// without prior check for MySQL version.

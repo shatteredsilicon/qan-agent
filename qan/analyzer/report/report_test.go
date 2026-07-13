@@ -58,7 +58,7 @@ func TestResult001(t *testing.T) {
 			ReportLimit: 10,
 		},
 	}
-	report := MakeReport(config.QAN, interval.StartTime, interval.StopTime, interval, result, nil)
+	report := MakeReport(config, interval.StartTime, interval.StopTime, nil, result, nil, nil)
 
 	// 1st: 2.9
 	assert.Equal(t, "3000000000000003", report.Class[0].Id)
@@ -73,7 +73,7 @@ func TestResult001(t *testing.T) {
 
 	// Limit=2 results in top 2 queries and the rest in 1 LRQ "query".
 	config.ReportLimit = 2
-	report = MakeReport(config.QAN, interval.StartTime, interval.StopTime, interval, result, nil)
+	report = MakeReport(config, interval.StartTime, interval.StopTime, nil, result, nil, nil)
 	assert.Equal(t, 3, len(report.Class))
 
 	assert.Equal(t, "3000000000000003", report.Class[0].Id)

@@ -18,11 +18,13 @@
 package explain
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
@@ -36,7 +38,10 @@ func TestExplain(t *testing.T) {
 	db := "test"
 	query := `{"ns":"test.col1","op":"query","query":{"find":"col1","filter":{"name":"Alicja"}}}`
 
-	explainResult, err := Explain(options.Client().ApplyURI(dsn), db, query)
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(dsn))
+	require.NoError(t, err)
+
+	explainResult, err := Explain(client, db, query)
 	require.NoError(t, err)
 
 	got := bson.M{}
@@ -61,7 +66,10 @@ func TestExplainDecodeQueryError(t *testing.T) {
 	db := "test"
 	query := `{Jas`
 
-	explainResult, err := Explain(options.Client().ApplyURI(dsn), db, query)
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(dsn))
+	assert.Nil(t, err)
+
+	explainResult, err := Explain(client, db, query)
 	assert.Nil(t, explainResult)
 	assert.Error(t, err)
 	assert.Equal(t, "explain: unable to decode query {Jas: unexpected EOF", err.Error())

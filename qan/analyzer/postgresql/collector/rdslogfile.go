@@ -3,6 +3,7 @@ package collector
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,11 +20,12 @@ import (
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/data"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/postgresql/aggregator"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/postgresql/logparser"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/rds"
 	"github.com/shatteredsilicon/ssm/proto"
-	"github.com/shatteredsilicon/ssm/proto/config"
 )
 
 const (
@@ -33,9 +35,11 @@ const (
 )
 
 type RDSLogFileCollector struct {
-	config                           config.QAN
+	config                           analyzer.QAN
 	logger                           *pct.Logger
+	db                               *sql.DB
 	spooler                          data.Spooler
+	cache                            data.Cacher
 	records                          map[string]*rdsLogFileRecord
 	rds                              *rds.Service
 	lastRDSLogWritten                *int64
@@ -44,11 +48,13 @@ type RDSLogFileCollector struct {
 	rateLimitTimestamps              []time.Time // stores the timestamps when the historical rate limit happened
 }
 
-func NewRDSLogFileCollector(config config.QAN, logger *pct.Logger, spooler data.Spooler) *RDSLogFileCollector {
+func NewRDSLogFileCollector(config analyzer.QAN, logger *pct.Logger, db *sql.DB, spooler data.Spooler, cache data.Cacher) *RDSLogFileCollector {
 	return &RDSLogFileCollector{
 		config:  config,
 		logger:  logger,
+		db:      db,
 		spooler: spooler,
+		cache:   cache,
 		records: make(map[string]*rdsLogFileRecord),
 	}
 }
@@ -143,6 +149,22 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 	go func() {
 		ag := aggregator.NewAggregator(*c.config.ExampleQueries)
 		startTime := time.Now()
+
+		finalize := func() {
+			now := time.Now()
+			result := ag.Finalize(c.config.QAN, startTime, now)
+			if len(result.Class) == 0 {
+				return
+			}
+
+			report := report.MakeReport(c.config, startTime, now, nil, result, c.logger, pretchDataHandler(c.config, c.db, c.cache))
+			ag = aggregator.NewAggregator(true)
+			startTime = time.Now()
+			if err := c.spooler.Write("qan", report); err != nil {
+				c.logger.Warn("Lost report: ", err)
+			}
+		}
+
 		for {
 			select {
 			case e := <-logEventChan:
@@ -160,23 +182,12 @@ func (c *RDSLogFileCollector) Start(ctx context.Context) {
 				}
 				e.AttemptToResolveParams()
 				if ag.ShouldFinalize(e) {
-					report := ag.Finalize(c.config, startTime, time.Now())
-					ag = aggregator.NewAggregator(true)
-					startTime = time.Now()
-					if err := c.spooler.Write("qan", report); err != nil {
-						c.logger.Warn("Lost report: ", err)
-					}
+					finalize()
 				}
 				ag.AddEvent(e)
 			case <-stopC:
 			case <-ctx.Done():
-				report := ag.Finalize(c.config, startTime, time.Now())
-				if len(report.Class) == 0 {
-					return
-				}
-				if err := c.spooler.Write("qan", report); err != nil {
-					c.logger.Warn("Lost report: ", err)
-				}
+				finalize()
 				return
 			}
 		}
@@ -260,7 +271,7 @@ func (c *RDSLogFileCollector) setupRDS() error {
 		return err
 	}
 
-	rdsSvcDetail, err := rds.GetRDSServiceDetail(*agentConfig, c.config)
+	rdsSvcDetail, err := rds.GetRDSServiceDetail(*agentConfig, c.config.QAN)
 	if err != nil {
 		c.logger.Error(fmt.Sprintf("Error fetching rds service detail: %s\n", err.Error()))
 		return err

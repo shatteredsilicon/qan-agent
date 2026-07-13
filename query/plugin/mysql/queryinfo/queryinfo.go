@@ -10,7 +10,8 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
-func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfoResult, error) {
+// QueryInfo fills up guessed DB and returns query info
+func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam, cachedCheck func(string) bool) (*proto.QueryInfoResult, error) {
 	res := make(map[string]*proto.QueryInfo)
 	var dbName string
 	var guessDB *proto.GuessDB
@@ -36,30 +37,38 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfo
 			}
 		}
 
-		if len(tableNames) > 0 && dbName != "" {
-			for i := range param.Table {
-				if param.Table[i].Db == "" {
-					param.Table[i].Db = dbName
-				}
+		q := &proto.TableInfoQuery{
+			UUID: param.UUID,
+		}
+
+		for i := range param.Table {
+			if param.Table[i].Db == "" {
+				param.Table[i].Db = dbName
 			}
-			for i := range param.Index {
-				if param.Index[i].Db == "" {
-					param.Index[i].Db = dbName
-				}
-			}
-			for i := range param.Status {
-				if param.Status[i].Db == "" {
-					param.Status[i].Db = dbName
-				}
+			if cachedCheck == nil || !cachedCheck(fmt.Sprintf("%s.%s", param.Table[i].Db, param.Table[i].Table)) {
+				q.Create = append(q.Create, param.Table[i])
 			}
 		}
 
-		tableRes, err := tableinfo.TableInfo(c, &proto.TableInfoQuery{
-			UUID:   param.UUID,
-			Create: param.Table,
-			Index:  param.Index,
-			Status: param.Status,
-		})
+		for i := range param.Index {
+			if param.Index[i].Db == "" {
+				param.Index[i].Db = dbName
+			}
+			if cachedCheck == nil || !cachedCheck(fmt.Sprintf("%s.%s", param.Index[i].Db, param.Index[i].Table)) {
+				q.Index = append(q.Index, param.Index[i])
+			}
+		}
+
+		for i := range param.Status {
+			if param.Status[i].Db == "" {
+				param.Status[i].Db = dbName
+			}
+			if cachedCheck == nil || !cachedCheck(fmt.Sprintf("%s.%s", param.Status[i].Db, param.Status[i].Table)) {
+				q.Status = append(q.Status, param.Status[i])
+			}
+		}
+
+		tableRes, err := tableinfo.TableInfo(c, q)
 		if err != nil {
 			return nil, err
 		}
@@ -94,26 +103,30 @@ func QueryInfo(c mysql.Connector, param *proto.QueryInfoParam) (*proto.QueryInfo
 			}
 		}
 
-		for _, p := range param.Procedure {
-			if p.DB == "" {
-				p.DB = dbName
+		for i := range param.Procedure {
+			if param.Procedure[i].DB == "" {
+				param.Procedure[i].DB = dbName
 			}
 
-			dbProcedure := p.DB + "." + p.Name
+			dbProcedure := param.Procedure[i].DB + "." + param.Procedure[i].Name
+			if cachedCheck != nil && cachedCheck(dbProcedure) {
+				continue
+			}
+
 			queryInfo, ok := res[dbProcedure]
 			if !ok {
 				res[dbProcedure] = &proto.QueryInfo{}
 				queryInfo = res[dbProcedure]
 			}
 
-			db := util.EscapeString(p.DB)
-			name := util.EscapeString(p.Name)
+			db := util.EscapeString(param.Procedure[i].DB)
+			name := util.EscapeString(param.Procedure[i].Name)
 			def, err := showCreateProcedure(c, util.Ident(db, name))
 			if err != nil {
 				if queryInfo.Errors == nil {
 					queryInfo.Errors = []string{}
 				}
-				queryInfo.Errors = append(queryInfo.Errors, fmt.Sprintf("SHOW CREATE PROCEDURE %s: %s", p.Name, err))
+				queryInfo.Errors = append(queryInfo.Errors, fmt.Sprintf("SHOW CREATE PROCEDURE %s: %s", param.Procedure[i].Name, err))
 				continue
 			}
 			queryInfo.Create = def

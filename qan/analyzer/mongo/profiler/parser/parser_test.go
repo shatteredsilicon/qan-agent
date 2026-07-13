@@ -1,26 +1,41 @@
 package parser
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
 
 	pm "github.com/percona/percona-toolkit/src/go/mongolib/proto"
+	ssmProto "github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
+	mongoDriver "go.mongodb.org/mongo-driver/mongo"
 
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler/aggregator"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo"
 )
 
 func TestNew(t *testing.T) {
 	docsChan := make(chan pm.SystemProfile)
-	pcQan := pc.QAN{
-		Interval: 60,
+	pcQan := analyzer.QAN{
+		QAN: pc.QAN{
+			Interval: 60,
+		},
 	}
-	a := aggregator.New(time.Now(), pcQan)
+
+	mongoOpts, err := mongo.MongoClientOpts("mongodb://127.0.0.1:27017")
+	require.NoError(t, err)
+
+	client, err := mongoDriver.Connect(context.TODO(), mongoOpts)
+	require.NoError(t, err)
+
+	a := aggregator.New(time.Now(), pcQan, client, pct.NewLogger(make(chan ssmProto.LogEntry), "aggregator"))
 
 	type args struct {
 		docsChan   <-chan pm.SystemProfile
@@ -52,10 +67,19 @@ func TestNew(t *testing.T) {
 func TestParser_StartStop(t *testing.T) {
 	var err error
 	docsChan := make(chan pm.SystemProfile)
-	pcQan := pc.QAN{
-		Interval: 60,
+	pcQan := analyzer.QAN{
+		QAN: pc.QAN{
+			Interval: 60,
+		},
 	}
-	a := aggregator.New(time.Now(), pcQan)
+
+	mongoOpts, err := mongo.MongoClientOpts("mongodb://127.0.0.1:27017")
+	require.NoError(t, err)
+
+	client, err := mongoDriver.Connect(context.TODO(), mongoOpts)
+	require.NoError(t, err)
+
+	a := aggregator.New(time.Now(), pcQan, client, pct.NewLogger(make(chan ssmProto.LogEntry), "aggregator"))
 
 	parser1 := New(docsChan, a)
 	err = parser1.Start()
@@ -72,16 +96,25 @@ func TestParser_StartStop(t *testing.T) {
 
 func TestParser_running(t *testing.T) {
 	docsChan := make(chan pm.SystemProfile)
-	pcQan := pc.QAN{
-		Interval: 1,
+	pcQan := analyzer.QAN{
+		QAN: pc.QAN{
+			Interval: 1,
+		},
 	}
-	a := aggregator.New(time.Now(), pcQan)
+
+	mongoOpts, err := mongo.MongoClientOpts("mongodb://127.0.0.1:27017")
+	require.NoError(t, err)
+
+	client, err := mongoDriver.Connect(context.TODO(), mongoOpts)
+	require.NoError(t, err)
+
+	a := aggregator.New(time.Now(), pcQan, client, pct.NewLogger(make(chan ssmProto.LogEntry), "aggregator"))
 	reportChan := a.Start()
 	defer a.Stop()
 	d := time.Duration(pcQan.Interval) * time.Second
 
 	parser1 := New(docsChan, a)
-	err := parser1.Start()
+	err = parser1.Start()
 	require.NoError(t, err)
 
 	now := time.Now().UTC()

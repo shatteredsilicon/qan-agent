@@ -859,6 +859,7 @@ type ManagerTestSuite struct {
 	basedir  string
 	trashDir string
 	dataDir  string
+	cacheDir string
 	dataChan chan []byte
 	respChan chan interface{}
 	client   *mock.DataClient
@@ -894,7 +895,7 @@ func (s *ManagerTestSuite) TearDownSuite(t *C) {
 // --------------------------------------------------------------------------
 
 func (s *ManagerTestSuite) TestGetConfig(t *C) {
-	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client, make(chan os.Signal))
+	m := data.NewManager(s.logger, s.dataDir, s.trashDir, s.cacheDir, "localhost", s.client, make(chan os.Signal))
 	t.Assert(m, NotNil)
 
 	config := &pc.Data{
@@ -1007,7 +1008,7 @@ func (s *ManagerTestSuite) TestGetConfig(t *C) {
 }
 
 func (s *ManagerTestSuite) TestSetConfig(t *C) {
-	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client, make(chan os.Signal))
+	m := data.NewManager(s.logger, s.dataDir, s.trashDir, s.cacheDir, "localhost", s.client, make(chan os.Signal))
 	t.Assert(m, NotNil)
 
 	config := pc.Data{
@@ -1152,7 +1153,7 @@ func (s *ManagerTestSuite) TestSetConfig(t *C) {
 
 func (s *ManagerTestSuite) TestStatus(t *C) {
 	// Start a data manager.
-	m := data.NewManager(s.logger, s.dataDir, s.trashDir, "localhost", s.client, make(chan os.Signal))
+	m := data.NewManager(s.logger, s.dataDir, s.trashDir, s.cacheDir, "localhost", s.client, make(chan os.Signal))
 	t.Assert(m, NotNil)
 	config := &pc.Data{
 		Encoding:     "gzip",

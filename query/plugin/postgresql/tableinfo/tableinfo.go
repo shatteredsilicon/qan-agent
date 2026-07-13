@@ -333,7 +333,9 @@ func showStatus(db *sql.DB, schema, table string) (*TableStatus, error) {
 		&status.AnalyzeCount,
 		&status.AutoAnalyzeCount,
 	)
-	if err != nil {
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 

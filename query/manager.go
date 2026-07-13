@@ -24,16 +24,19 @@ import (
 
 	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/os"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/postgresql"
+	"github.com/shatteredsilicon/qan-agent/util"
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
 const (
-	SERVICE_NAME = "query"
+	SERVICE_NAME      = "query"
+	QAN_SERVICE_NAMNE = "qan"
 )
 
 type Manager struct {
@@ -124,6 +127,14 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 	p, ok := m.plugins[in.Subsystem]
 	if !ok {
 		return cmd.Reply(nil, fmt.Errorf("can't query %s", in.Subsystem))
+	}
+
+	var qanConfig analyzer.QAN
+	if _, err := pct.Basedir.ReadConfig(fmt.Sprintf("%s-%s", QAN_SERVICE_NAMNE, in.UUID), &qanConfig); err != nil {
+		return cmd.Reply(nil, fmt.Errorf("failed to read QAN config file"))
+	}
+	if util.ValueOf(qanConfig.PrefetchMetadata) {
+		return cmd.Reply(nil, fmt.Errorf("query commands for this instance is not allowed as it's in PrefetchMetadata mode"))
 	}
 
 	data, err := p.Handle(cmd, in)

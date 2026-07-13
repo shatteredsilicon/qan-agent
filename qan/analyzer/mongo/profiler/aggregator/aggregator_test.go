@@ -1,15 +1,21 @@
 package aggregator
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/percona/percona-toolkit/src/go/mongolib/proto"
-	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/event"
+	"github.com/shatteredsilicon/qan-agent/pct"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
+	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo"
+	ssmProto "github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	mongoDriver "go.mongodb.org/mongo-driver/mongo"
 )
 
 func TestAggregator_Add(t *testing.T) {
@@ -20,12 +26,20 @@ func TestAggregator_Add(t *testing.T) {
 	timeEnd, err := time.Parse("2006-01-02 15:04:05", "2017-07-02 07:56:00")
 	require.NoError(t, err)
 
-	config := pc.QAN{
-		UUID:     "abc",
-		Interval: 60, // 60s
+	config := analyzer.QAN{
+		QAN: pc.QAN{
+			UUID:     "abc",
+			Interval: 60, // 60s
+		},
 	}
 
-	aggregator := New(timeStart, config)
+	mongoOpts, err := mongo.MongoClientOpts("mongodb://127.0.0.1:27017")
+	require.NoError(t, err)
+
+	client, err := mongoDriver.Connect(context.TODO(), mongoOpts)
+	require.NoError(t, err)
+
+	aggregator := New(timeStart, config, client, pct.NewLogger(make(chan ssmProto.LogEntry), "aggregator"))
 	reportChan := aggregator.Start()
 	defer aggregator.Stop()
 
@@ -161,12 +175,20 @@ func TestAggregator_Add_EmptyInterval(t *testing.T) {
 	timeEnd, err := time.Parse("2006-01-02 15:04:05", "2017-07-02 07:56:00")
 	require.NoError(t, err)
 
-	config := pc.QAN{
-		UUID:     "abc",
-		Interval: 60, // 60s
+	config := analyzer.QAN{
+		QAN: pc.QAN{
+			UUID:     "abc",
+			Interval: 60, // 60s
+		},
 	}
 
-	aggregator := New(timeStart, config)
+	mongoOpts, err := mongo.MongoClientOpts("mongodb://127.0.0.1:27017")
+	require.NoError(t, err)
+
+	client, err := mongoDriver.Connect(context.TODO(), mongoOpts)
+	require.NoError(t, err)
+
+	aggregator := New(timeStart, config, client, pct.NewLogger(make(chan ssmProto.LogEntry), "aggregator"))
 	reportChan := aggregator.Start()
 
 	// finish interval immediately
@@ -187,13 +209,21 @@ func TestAggregator_Add_EmptyInterval(t *testing.T) {
 
 func TestAggregator_StartStop(t *testing.T) {
 	var err error
-	config := pc.QAN{
-		UUID:     "abc",
-		Interval: 60, // 60s
+	config := analyzer.QAN{
+		QAN: pc.QAN{
+			UUID:     "abc",
+			Interval: 60, // 60s
+		},
 	}
 
+	mongoOpts, err := mongo.MongoClientOpts("mongodb://127.0.0.1:27017")
+	require.NoError(t, err)
+
+	client, err := mongoDriver.Connect(context.TODO(), mongoOpts)
+	require.NoError(t, err)
+
 	timeStart, err := time.Parse("2006-01-02 15:04:05", "2017-07-02 07:55:00")
-	aggregator := New(timeStart, config)
+	aggregator := New(timeStart, config, client, pct.NewLogger(make(chan ssmProto.LogEntry), "aggregator"))
 	reportChan1 := aggregator.Start()
 	require.NoError(t, err)
 
