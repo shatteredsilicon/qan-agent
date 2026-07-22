@@ -594,10 +594,6 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 }
 
 func (a *RealAnalyzer) prefetchMetadata(class *event.Class) error {
-	if !util.ValueOf(a.config.PrefetchMetadata) {
-		return nil
-	}
-
 	q := proto.QueryInfoParam{}
 
 	query := class.Fingerprint
@@ -606,12 +602,10 @@ func (a *RealAnalyzer) prefetchMetadata(class *event.Class) error {
 		q.DB = class.Example.Db
 	}
 
-	abstract, tables, procedures, err := ParseQuery(query)
+	abstract, tables, procedures, tableAlias, err := ParseQuery(query)
 	if err != nil {
 		return err
 	}
-
-	class.Abstract = abstract
 
 	for _, table := range tables {
 		q.Table = append(q.Table, proto.Table(table))
@@ -619,6 +613,14 @@ func (a *RealAnalyzer) prefetchMetadata(class *event.Class) error {
 		q.Status = append(q.Status, proto.Table(table))
 	}
 	q.Procedure = procedures
+
+	replaceExplainTables(class.ExplainRows, tableAlias, q.Table)
+
+	if !util.ValueOf(a.config.PrefetchMetadata) {
+		return nil
+	}
+
+	class.Abstract = abstract
 
 	queryInfo, err := queryinfo.QueryInfo(a.mysqlConn, &q, a.cachedCheck)
 	if err != nil {
@@ -702,6 +704,10 @@ func (a *RealAnalyzer) prefetchMetadata(class *event.Class) error {
 	res, err := explain.Explain(a.mysqlConn, class.Example.Db, class.Example.Query, false)
 	if err != nil {
 		return err
+	}
+
+	if res != nil {
+		replaceExplainTables(res.Classic, tableAlias, q.Table)
 	}
 
 	if err = a.addVisualExplain(res); err != nil {
@@ -808,6 +814,7 @@ func ParseQuery(query string) (
 	abstract string,
 	tables []queryProto.Table,
 	procedures []queryProto.Procedure,
+	tableAlias map[string]string,
 	err error,
 ) {
 	// Fingerprints replace IN (1, 2) -> in (?+) but "?+" is not valid SQL so
@@ -862,6 +869,12 @@ func ParseQuery(query string) (
 			case *sqlparser.AliasedTableExpr:
 				if n.TableNameString() == "dual" {
 					return false, nil
+				} else if n.As.IsEmpty() || n.Expr == nil {
+				} else if t, ok := n.Expr.(sqlparser.TableName); ok {
+					if tableAlias == nil {
+						tableAlias = make(map[string]string)
+					}
+					tableAlias[sqlparser.String(n.As)] = sqlparser.String(t)
 				}
 			case *sqlparser.ColName, *sqlparser.StarExpr:
 				return false, nil
@@ -895,7 +908,7 @@ func ParseQuery(query string) (
 	} else if matches := salparserFallbackRegex.FindStringSubmatch(query); len(matches) > 0 {
 		abstract = strings.ToUpper(matches[1])
 	} else {
-		return "", nil, nil, fmt.Errorf("failed to parse query '%s' with sqlparser: %s", query, err.Error())
+		return "", nil, nil, nil, fmt.Errorf("failed to parse query '%s' with sqlparser: %s", query, err.Error())
 	}
 
 	existTables := map[string]struct{}{}
@@ -938,4 +951,21 @@ func ParseQuery(query string) (
 		}
 	}
 	return
+}
+
+func replaceExplainTables(rows []*proto.ExplainRow, alias map[string]string, tables []proto.Table) {
+	for i := range rows {
+		if len(alias) > 0 {
+			if originTable, ok := alias[rows[i].Table.String]; ok {
+				rows[i].Table.String = originTable
+				continue
+			}
+		}
+
+		for _, t := range tables {
+			if t.Db != "" && rows[i].Table.String == t.Table {
+				rows[i].Table.String = fmt.Sprintf("%s.%s", t.Db, t.Table)
+			}
+		}
+	}
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/event"
+	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/shatteredsilicon/ssm/proto/qan"
 )
 
@@ -85,6 +86,11 @@ func MakeReport(
 		if logger != nil && report.Class[processedI] != nil && report.Class[processedI].Fingerprint != "" && report.Class[processedI].Example != nil && report.Class[processedI].Example.Query == "" {
 			classBytes, _ := json.Marshal(*report.Class[processedI])
 			logger.Debug("MakeReport got an non-empty fingerprint and empty query example class: %s", string(classBytes))
+		}
+
+		if report.Class[processedI].Example != nil && report.Class[processedI].Example.Explain == "" && len(result.Class[processedI].ExplainRows) > 0 {
+			explainBytes, _ := json.Marshal(&proto.ExplainResult{Classic: result.Class[processedI].ExplainRows})
+			report.Class[processedI].Example.Explain = string(explainBytes)
 		}
 	}
 	report.Class = report.Class[:processedI]
