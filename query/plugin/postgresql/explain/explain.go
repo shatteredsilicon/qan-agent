@@ -198,7 +198,7 @@ func textExplain(db *sql.DB, query string) (explain string, err error) {
 
 func jsonExplain(db *sql.DB, query string) (string, error) {
 	var explain string
-	err := db.QueryRow(fmt.Sprintf("EXPLAIN (FORMAT JSON) %s", query)).Scan(&explain)
+	err := db.QueryRow(fmt.Sprintf("EXPLAIN (VERBOSE, FORMAT JSON) %s", query)).Scan(&explain) // VERBOSE for it to puts schema names in EXPLAIN output
 	if err != nil {
 		return "", err
 	}

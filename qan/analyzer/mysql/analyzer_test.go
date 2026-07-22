@@ -546,17 +546,20 @@ var parseQueryTests = []struct {
 	abstract   string
 	tables     []queryProto.Table
 	procedures []queryProto.Procedure
+	tableAlias map[string]string
 }{
 	{
 		"select c from t where id=?",
 		"SELECT t",
 		[]queryProto.Table{{Db: "", Table: "t"}},
 		nil,
+		nil,
 	},
 	{ // #1
 		"select c from db.t where id=?",
 		"SELECT db.t",
 		[]queryProto.Table{{Db: "db", Table: "t"}},
+		nil,
 		nil,
 	},
 	{ // #2
@@ -567,11 +570,13 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "t2"},
 		},
 		nil,
+		nil,
 	},
 	{ // #3
 		"SELECT /*!40001 SQL_NO_CACHE */ * FROM `film`",
 		"SELECT film",
 		[]queryProto.Table{{Db: "", Table: "film"}},
+		nil,
 		nil,
 	},
 	{ // #4
@@ -581,6 +586,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "ta"},
 			{Db: "", Table: "tb"},
 		},
+		nil,
 		nil,
 	},
 	{ // #5
@@ -592,6 +598,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "tc"},
 		},
 		nil,
+		nil,
 	},
 
 	/////////////////////////////////////////////////////////////////////
@@ -601,11 +608,13 @@ var parseQueryTests = []struct {
 		"INSERT my_table",
 		[]queryProto.Table{{Db: "", Table: "my_table"}},
 		nil,
+		nil,
 	},
 	{ // #7
 		"INSERT INTO d.t (a,b,c) VALUES (1, 2, 3)",
 		"INSERT d.t",
 		[]queryProto.Table{{Db: "d", Table: "t"}},
+		nil,
 		nil,
 	},
 
@@ -616,6 +625,7 @@ var parseQueryTests = []struct {
 		"UPDATE t",
 		[]queryProto.Table{{Db: "", Table: "t"}},
 		nil,
+		nil,
 	},
 
 	/////////////////////////////////////////////////////////////////////
@@ -624,6 +634,7 @@ var parseQueryTests = []struct {
 		"delete from t where id in (?+)",
 		"DELETE t",
 		[]queryProto.Table{{Db: "", Table: "t"}},
+		nil,
 		nil,
 	},
 
@@ -634,6 +645,7 @@ var parseQueryTests = []struct {
 		"SHOW STATUS",
 		nil,
 		nil,
+		nil,
 	},
 
 	/////////////////////////////////////////////////////////////////////
@@ -642,6 +654,7 @@ var parseQueryTests = []struct {
 		"REPLACE my_table",
 		[]queryProto.Table{{Db: "", Table: "my_table"}},
 		nil,
+		nil,
 	},
 	{ // #12
 		"OPTIMIZE TABLE `o2408`.`agent_log`",
@@ -649,6 +662,7 @@ var parseQueryTests = []struct {
 		[]queryProto.Table{
 			{Db: "o2408", Table: "agent_log"},
 		},
+		nil,
 		nil,
 	},
 	{ // #13
@@ -659,6 +673,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "t2"},
 		},
 		nil,
+		nil,
 	},
 	{ // #14
 		"insert into data values (...)",
@@ -666,6 +681,7 @@ var parseQueryTests = []struct {
 		[]queryProto.Table{
 			{Db: "", Table: "data"},
 		},
+		nil,
 		nil,
 	},
 	{ // #15
@@ -675,6 +691,7 @@ var parseQueryTests = []struct {
 		[]queryProto.Procedure{
 			{DB: "", Name: "pita"},
 		},
+		nil,
 	},
 	{ // #16 exceeds MAX_JOIN_DEPTH
 		"select c from a" +
@@ -698,17 +715,20 @@ var parseQueryTests = []struct {
 			{"", "z"},
 		},
 		nil,
+		nil,
 	},
 	{ // #17
 		"SELECT DISTINCT c\n FROM sbtest1\nWHERE id\nBETWEEN 1\nAND 100\nORDER BY  c\n",
 		"SELECT sbtest1",
 		[]queryProto.Table{{Db: "", Table: "sbtest1"}},
 		nil,
+		nil,
 	},
 	{ // #18
 		"SELECT DISTINCT c FROM sbtest2 WHERE id BETWEEN 1 AND 100 ORDER BY c",
 		"SELECT sbtest2",
 		[]queryProto.Table{{Db: "", Table: "sbtest2"}},
+		nil,
 		nil,
 	},
 	// Don't remove the ; at the end of the next query.
@@ -719,10 +739,12 @@ var parseQueryTests = []struct {
 		"SELECT sysbenchtest.t6002_0",
 		[]queryProto.Table{{Db: "sysbenchtest", Table: "t6002_0"}},
 		nil,
+		nil,
 	},
 	{ // #20
 		"use zapp",
 		"USE",
+		nil,
 		nil,
 		nil,
 	},
@@ -732,17 +754,20 @@ var parseQueryTests = []struct {
 		"SELECT t6003_0",
 		[]queryProto.Table{{Db: "", Table: "t6003_0"}},
 		nil,
+		nil,
 	},
 	{ // #22
 		"CREATE TABLE t6004 (PRIMARY KEY id int, a varchar(25)) engine=innodb",
 		"CREATE TABLE t6004",
 		[]queryProto.Table{{Db: "", Table: "t6004"}},
 		nil,
+		nil,
 	},
 	{ // #23
 		"ALTER TABLE sakila.actor ADD COLUMN newcol int",
 		"ALTER TABLE sakila.actor",
 		[]queryProto.Table{{Db: "sakila", Table: "actor"}},
+		nil,
 		nil,
 	},
 	// Db & Table are empty because CREATE DATABASE is not yet supported by Vitess.sqlparser
@@ -751,17 +776,20 @@ var parseQueryTests = []struct {
 		"CREATE DATABASE ssm",
 		nil,
 		nil,
+		nil,
 	},
 	{ // #25
 		"create index idx ON percona (f1)",
 		"ALTER TABLE percona",
 		[]queryProto.Table{{Db: "", Table: "percona"}},
 		nil,
+		nil,
 	},
 	{ // #26 override the default USE
 		"create index idx ON brannigan.percona (f1)",
 		"ALTER TABLE brannigan.percona",
 		[]queryProto.Table{{Db: "brannigan", Table: "percona"}},
+		nil,
 		nil,
 	},
 	// PMM-1892. Upgraded Vitess libraries to support this query.
@@ -782,10 +810,15 @@ var parseQueryTests = []struct {
 			{Db: "information_schema", Table: "columns"},
 		},
 		nil,
+		map[string]string{
+			"c": "columns",
+			"t": "tables",
+		},
 	},
 	{ // #28
 		"SELECT @@`version`",
 		"SELECT",
+		nil,
 		nil,
 		nil,
 	},
@@ -797,6 +830,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "test2"},
 		},
 		nil,
+		nil,
 	},
 	{ // #30
 		"SELECT t.* FROM (SELECT t1.*, t2.* FROM (SELECT * FROM test1) t1 JOIN (SELECT * FROM test2) t2 ON t1.id1 = t2.id2) t UNION SELECT t.* FROM (SELECT t3.*, t4.* FROM (SELECT * FROM test3) t3 JOIN (SELECT * FROM test4) t4 ON t3.id3 = t4.id4) t",
@@ -807,6 +841,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "test3"},
 			{Db: "", Table: "test4"},
 		},
+		nil,
 		nil,
 	},
 	{ // #31
@@ -827,6 +862,7 @@ var parseQueryTests = []struct {
 			{Db: "test", Table: "wp_users"},
 		},
 		nil,
+		nil,
 	},
 	{ // #32
 		`
@@ -843,6 +879,7 @@ var parseQueryTests = []struct {
 		[]queryProto.Table{
 			{Db: "test", Table: "tmp_t"},
 		},
+		nil,
 		nil,
 	},
 	{ // #33
@@ -862,6 +899,7 @@ var parseQueryTests = []struct {
 			{Db: "", Table: "t2"},
 		},
 		nil,
+		nil,
 	},
 }
 
@@ -870,12 +908,13 @@ func TestParseQuery(t *testing.T) {
 
 	for i, test := range parseQueryTests {
 		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
-			abstract, tables, procedures, err := mysqlAnalyzer.ParseQuery(test.query)
+			abstract, tables, procedures, tableAlias, err := mysqlAnalyzer.ParseQuery(test.query)
 			require.Nil(t, err)
 
 			require.Equal(t, test.abstract, abstract)
 			require.Equal(t, test.tables, tables)
 			require.Equal(t, test.procedures, procedures)
+			require.Equal(t, test.tableAlias, tableAlias)
 		})
 	}
 }
