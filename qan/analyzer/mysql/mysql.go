@@ -197,15 +197,16 @@ func (m *MySQLAnalyzer) Stop() error {
 func (m *MySQLAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 	// Configuration
 	cfg := map[string]interface{}{
-		"CollectFrom":     m.config.CollectFrom,
-		"Interval":        m.config.Interval,
-		"MaxSlowLogSize":  m.config.MaxSlowLogSize,
-		"RetainSlowLogs":  m.config.RetainSlowLogs,
-		"SlowLogRotation": m.config.SlowLogRotation,
-		"ExampleQueries":  m.config.ExampleQueries,
-		"ReportLimit":     m.config.ReportLimit,
-		"FilterOmit":      m.config.FilterOmit,
-		"FilterAllow":     m.config.FilterAllow,
+		"CollectFrom":       m.config.CollectFrom,
+		"Interval":          m.config.Interval,
+		"MaxSlowLogSize":    m.config.MaxSlowLogSize,
+		"RetainSlowLogs":    m.config.RetainSlowLogs,
+		"SlowLogRotation":   m.config.SlowLogRotation,
+		"ExampleQueries":    m.config.ExampleQueries,
+		"ExampleResolution": m.config.ExampleResolution,
+		"ReportLimit":       m.config.ReportLimit,
+		"FilterOmit":        m.config.FilterOmit,
+		"FilterAllow":       m.config.FilterAllow,
 	}
 
 	// Info from SHOW GLOBAL STATUS
