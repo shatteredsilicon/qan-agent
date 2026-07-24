@@ -139,8 +139,9 @@ func (m *MongoAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"Interval":       m.config.Interval,
-		"ExampleQueries": m.config.ExampleQueries,
+		"Interval":          m.config.Interval,
+		"ExampleQueries":    m.config.ExampleQueries,
+		"ExampleResolution": m.config.ExampleResolution,
 	}
 }
 

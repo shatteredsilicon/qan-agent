@@ -168,9 +168,10 @@ func (a *PGAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"Interval":       internal,
-		"ExampleQueries": exampleQueries,
-		"CollectFrom":    a.config.CollectFrom,
+		"Interval":          internal,
+		"ExampleQueries":    exampleQueries,
+		"ExampleResolution": a.config.ExampleResolution,
+		"CollectFrom":       a.config.CollectFrom,
 	}
 }
 
