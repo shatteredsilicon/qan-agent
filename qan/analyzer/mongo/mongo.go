@@ -8,6 +8,7 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 
 	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mongo/profiler"
@@ -15,7 +16,7 @@ import (
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo"
 )
 
-func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
+func New(ctx context.Context, inst instance.Instance) analyzer.Analyzer {
 	// Get available services from ctx
 	services, _ := ctx.Value("services").(map[string]interface{})
 
@@ -25,16 +26,16 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 
 	// return initialized MongoAnalyzer
 	return &MongoAnalyzer{
-		protoInstance: protoInstance,
-		spool:         spool,
-		logger:        logger,
+		instance: inst,
+		spool:    spool,
+		logger:   logger,
 	}
 }
 
 // MongoAnalyzer
 type MongoAnalyzer struct {
 	// dependencies
-	protoInstance proto.Instance
+	instance instance.Instance
 
 	// dependencies from ctx
 	logger *pct.Logger
@@ -70,7 +71,7 @@ func (m *MongoAnalyzer) Start() error {
 	}
 
 	// get the dsn from instance
-	dsn := mongo.FixDSN(m.protoInstance.DSN)
+	dsn := mongo.FixDSN(m.instance.DSN)
 
 	// if dsn is incorrect we should exit immediately as this is not gonna correct itself
 	mongoOpts, err := mongo.MongoClientOpts(dsn)

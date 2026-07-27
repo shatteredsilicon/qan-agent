@@ -112,7 +112,6 @@ func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connecto
 	if err = mysqlConn.Connect(); err != nil {
 		logger.Error(err.Error())
 	}
-	defer mysqlConn.Close()
 
 	outlierTime, err := mysqlConn.GetGlobalVarNumeric("slow_query_log_always_write_time")
 	if err != nil {

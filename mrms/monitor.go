@@ -25,10 +25,10 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/dsn"
+	inst "github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/mrms/checker"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
-	"github.com/shatteredsilicon/ssm/proto"
 )
 
 const MONITOR_NAME = "mrm-monitor"
@@ -39,7 +39,7 @@ type Checker interface {
 }
 
 type instance struct {
-	instance           proto.Instance
+	instance           inst.Instance
 	checker            Checker
 	listeners          map[chan interface{}]bool
 	slowlogCheckPaused bool
@@ -50,7 +50,7 @@ type Monitor interface {
 	Start(interval time.Duration) error
 	Stop() error
 	Status() map[string]string
-	Add(proto.Instance) chan interface{}
+	Add(inst.Instance) chan interface{}
 	Remove(string, chan interface{})
 	ListenerCount(uuid string) uint
 	Check()
@@ -108,7 +108,7 @@ func (m *RealMonitor) Status() map[string]string {
 	return m.status.All()
 }
 
-func (m *RealMonitor) Add(in proto.Instance) chan interface{} {
+func (m *RealMonitor) Add(in inst.Instance) chan interface{} {
 	m.logger.Debug("Add:call:" + dsn.HidePassword(in.DSN))
 	defer m.logger.Debug("Add:return:" + dsn.HidePassword(in.DSN))
 
@@ -120,7 +120,7 @@ func (m *RealMonitor) Add(in proto.Instance) chan interface{} {
 		m.logger.Debug("add:" + in.Subsystem + "-" + in.UUID)
 		c := checker.NewMySQL(
 			pct.NewLogger(m.logger.LogChan(), "mrms-check-mysql-"+in.Name),
-			m.mysqlConnFactory.Make(in.DSN),
+			in.MySQLConn(),
 		)
 		i = &instance{
 			instance:  in,

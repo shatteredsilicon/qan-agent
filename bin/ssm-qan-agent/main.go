@@ -266,7 +266,7 @@ func run(agentConfig *agent.AgentConfig) error {
 		pct.NewLogger(logChan, "instance-manager"),
 		pct.Basedir.Dir("instance"),
 		api,
-		mrmsMonitor,
+		mrmsMonitor.Add(instance.Instance{}),
 	)
 	if err := itManager.Start(); err != nil {
 		return fmt.Errorf("error starting instance manager: %s", err)

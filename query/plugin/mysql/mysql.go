@@ -20,6 +20,7 @@ package mysql
 import (
 	"encoding/json"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mysql/explain"
@@ -54,7 +55,7 @@ func New() *MySQL {
 }
 
 // Handle executes cmd for given instance and returns resulting data
-func (m *MySQL) Handle(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
+func (m *MySQL) Handle(cmd *proto.Cmd, in instance.Instance) (interface{}, error) {
 	c, ok := m.cmds[cmd.Cmd]
 	if !ok {
 		return nil, plugin.UnknownCmdError(cmd.Cmd)
@@ -63,61 +64,55 @@ func (m *MySQL) Handle(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
 	return c(cmd, in)
 }
 
-type execFunc func(cmd *proto.Cmd, in proto.Instance) (interface{}, error)
+type execFunc func(cmd *proto.Cmd, in instance.Instance) (interface{}, error)
 
-func (m *MySQL) explain(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	conn := m.connFactory.Make(in.DSN)
-	if err := conn.Connect(); err != nil {
+func (m *MySQL) explain(cmd *proto.Cmd, in instance.Instance) (interface{}, error) {
+	if err := in.MySQLConn().Connect(); err != nil {
 		return nil, err
 	}
-	defer conn.Close()
 
 	q := &proto.ExplainQuery{}
 	if err := json.Unmarshal(cmd.Data, q); err != nil {
 		return nil, err
 	}
 
-	result, err := explain.Explain(conn, q.Db, q.Query, len(q.WithExplainRows) > 0)
+	result, err := explain.Explain(in.MySQLConn(), q.Db, q.Query, len(q.WithExplainRows) > 0)
 	if result != nil && len(q.WithExplainRows) > 0 {
 		result.Classic = q.WithExplainRows
 	}
 	return result, err
 }
 
-func (m *MySQL) tableInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	conn := m.connFactory.Make(in.DSN)
-	if err := conn.Connect(); err != nil {
+func (m *MySQL) tableInfo(cmd *proto.Cmd, in instance.Instance) (interface{}, error) {
+	if err := in.MySQLConn().Connect(); err != nil {
 		return nil, err
 	}
-	defer conn.Close()
 
 	tableInfo := &proto.TableInfoQuery{}
 	if err := json.Unmarshal(cmd.Data, tableInfo); err != nil {
 		return nil, err
 	}
 
-	return tableinfo.TableInfo(conn, tableInfo)
+	return tableinfo.TableInfo(in.MySQLConn(), tableInfo)
 }
 
-func (m *MySQL) queryInfo(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
-	conn := m.connFactory.Make(in.DSN)
-	if err := conn.Connect(); err != nil {
+func (m *MySQL) queryInfo(cmd *proto.Cmd, in instance.Instance) (interface{}, error) {
+	if err := in.MySQLConn().Connect(); err != nil {
 		return nil, err
 	}
-	defer conn.Close()
 
 	param := &proto.QueryInfoParam{}
 	if err := json.Unmarshal(cmd.Data, param); err != nil {
 		return nil, err
 	}
 
-	return queryinfo.QueryInfo(conn, param, nil)
+	return queryinfo.QueryInfo(in.MySQLConn(), param, nil)
 }
 
-func (m *MySQL) summary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
+func (m *MySQL) summary(cmd *proto.Cmd, in instance.Instance) (interface{}, error) {
 	return summary.Summary(in.DSN)
 }
 
-func (m *MySQL) toolkitSummary(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
+func (m *MySQL) toolkitSummary(cmd *proto.Cmd, in instance.Instance) (interface{}, error) {
 	return summary.ToolkitSummary(in.DSN)
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/url"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/postgresql/explain"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/postgresql/queryinfo"
@@ -54,13 +55,13 @@ func (m *PostgreSQL) dbConn(dsn, database string) (*sql.DB, error) {
 }
 
 // Handle executes cmd for given instance and returns resulting data
-func (m *PostgreSQL) Handle(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
+func (m *PostgreSQL) Handle(cmd *proto.Cmd, in instance.Instance) (interface{}, error) {
 	c, ok := m.cmds[cmd.Cmd]
 	if !ok {
 		return nil, plugin.UnknownCmdError(cmd.Cmd)
 	}
 
-	return c(cmd, in)
+	return c(cmd, in.Instance)
 }
 
 type execFunc func(cmd *proto.Cmd, in proto.Instance) (interface{}, error)

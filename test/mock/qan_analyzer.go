@@ -20,6 +20,7 @@ package mock
 import (
 	"time"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
@@ -113,11 +114,11 @@ func (a *QanAnalyzer) crashOrError() error {
 /////////////////////////////////////////////////////////////////////////////
 
 type AnalyzerArgs struct {
-	Type          string
-	Name          string
-	ProtoInstance proto.Instance
-	RestartChan   chan proto.Instance
-	TickChan      chan time.Time
+	Type        string
+	Name        string
+	Instance    instance.Instance
+	RestartChan chan proto.Instance
+	TickChan    chan time.Time
 }
 
 type QanAnalyzerFactory struct {
@@ -137,7 +138,7 @@ func NewQanAnalyzerFactory(a ...analyzer.Analyzer) *QanAnalyzerFactory {
 func (f *QanAnalyzerFactory) Make(
 	analyzerType string,
 	analyzerName string,
-	protoInstance proto.Instance,
+	inst instance.Instance,
 ) (
 	analyzer.Analyzer,
 	error,
@@ -145,9 +146,9 @@ func (f *QanAnalyzerFactory) Make(
 	if f.n < len(f.analyzers) {
 		a := f.analyzers[f.n]
 		args := AnalyzerArgs{
-			Type:          analyzerType,
-			Name:          analyzerName,
-			ProtoInstance: protoInstance,
+			Type:     analyzerType,
+			Name:     analyzerName,
+			Instance: inst,
 		}
 		f.Args = append(f.Args, args)
 		f.n++

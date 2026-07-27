@@ -103,7 +103,7 @@ func (s *ManagerTestSuite) TestHandleGetInfoMySQL(t *C) {
 
 	// Create an instance manager.
 	mrm := mock.NewMrmsMonitor()
-	m := instance.NewManager(s.logger, s.instanceDir, s.api, mrm)
+	m := instance.NewManager(s.logger, s.instanceDir, s.api, mrm.Add(instance.Instance{}))
 	err := m.Start()
 	t.Assert(err, IsNil)
 	defer m.Stop()
@@ -149,7 +149,7 @@ func (s *ManagerTestSuite) TestStartAndUpdate(t *C) {
 
 	bytes, err := ioutil.ReadFile(mysqlInstanceFile)
 	t.Assert(err, IsNil)
-	var in proto.Instance
+	var in instance.Instance
 	err = json.Unmarshal(bytes, &in)
 	t.Assert(err, IsNil)
 	in.DSN = dsn         // use a real DSN
@@ -162,7 +162,7 @@ func (s *ManagerTestSuite) TestStartAndUpdate(t *C) {
 
 	// Create an instance manager.
 	mrm := mock.NewMrmsMonitor()
-	m := instance.NewManager(s.logger, s.instanceDir, s.api, mrm)
+	m := instance.NewManager(s.logger, s.instanceDir, s.api, mrm.Add(instance.Instance{}))
 	err = m.Start()
 	t.Assert(err, IsNil)
 	defer m.Stop()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/test/mock"
 	"github.com/shatteredsilicon/qan-agent/test/profiling"
@@ -32,8 +33,8 @@ func TestMongo_StartStopStatus(t *testing.T) {
 		"clock":  mock.NewClock(),
 	})
 
-	protoInstance := proto.Instance{}
-	plugin := New(ctx, protoInstance)
+	inst := instance.Instance{}
+	plugin := New(ctx, inst)
 
 	assert.Equal(t, map[string]string{serviceName: "Not running"}, plugin.Status())
 	err = plugin.Start()

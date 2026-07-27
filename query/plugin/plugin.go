@@ -18,9 +18,10 @@
 package plugin
 
 import (
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type Plugin interface {
-	Handle(cmd *proto.Cmd, in proto.Instance) (interface{}, error)
+	Handle(cmd *proto.Cmd, in instance.Instance) (interface{}, error)
 }

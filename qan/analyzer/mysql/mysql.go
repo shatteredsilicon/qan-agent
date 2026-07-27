@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -21,7 +22,7 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
-func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
+func New(ctx context.Context, inst instance.Instance) analyzer.Analyzer {
 	// Get available services from ctx
 	services, _ := ctx.Value("services").(map[string]interface{})
 
@@ -46,7 +47,7 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 		config:   analyzer.QAN{},
 		analyzer: nil,
 		// initialize
-		protoInstance:           protoInstance,
+		instance:                inst,
 		logger:                  logger,
 		clock:                   clock,
 		spool:                   spool,
@@ -67,7 +68,7 @@ type MySQLAnalyzer struct {
 	config   analyzer.QAN
 	analyzer analyzer.Analyzer
 	// services initialized in New
-	protoInstance           proto.Instance
+	instance                instance.Instance
 	logger                  *pct.Logger
 	clock                   ticker.Manager
 	spool                   data.Spooler
@@ -104,9 +105,6 @@ func (m *MySQLAnalyzer) Config() analyzer.QAN {
 func (m *MySQLAnalyzer) Start() error {
 	setConfig := m.Config()
 
-	// Create a MySQL connection.
-	mysqlConn := m.mysqlConnFactory.Make(m.protoInstance.DSN)
-
 	// Validate and transform the set config and into a running config.
 	config, err := config.ValidateConfig(setConfig)
 	if err != nil {
@@ -115,7 +113,7 @@ func (m *MySQLAnalyzer) Start() error {
 
 	// Add the MySQL DSN to the MySQL restart monitor. If MySQL restarts,
 	// the analyzer will stop its worker and re-configure MySQL.
-	mrmsChan := m.mrms.Add(m.protoInstance)
+	mrmsChan := m.mrms.Add(m.instance)
 
 	// Make a chan on which the clock will tick at even intervals:
 	// clock -> tickChan -> iter -> analyzer -> worker
@@ -128,15 +126,15 @@ func (m *MySQLAnalyzer) Start() error {
 	analyzerType := config.CollectFrom
 	switch analyzerType {
 	case "slowlog":
-		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, mysqlConn, m.mrms)
+		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, m.instance.MySQLConn(), m.mrms)
 	case "perfschema":
 		worker = m.perfschemaWorkerFactory.Make(name+"-worker", config)
 	case "rds-slowlog":
-		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, mysqlConn)
+		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, m.instance.MySQLConn())
 	default:
 		panic("Invalid analyzerType: " + analyzerType)
 	}
-	worker.SetConfig(mysqlConn, config)
+	worker.SetConfig(m.instance.MySQLConn(), config)
 
 	// Create and start a new analyzer. This should return immediately.
 	// The analyzer will configure MySQL, start its iter, then run it worker
@@ -144,8 +142,8 @@ func (m *MySQLAnalyzer) Start() error {
 	m.analyzer = NewRealAnalyzer(
 		pct.NewLogger(logChan, name),
 		config,
-		m.iterFactory.Make(analyzerType, mysqlConn, tickChan),
-		mysqlConn,
+		m.iterFactory.Make(analyzerType, m.instance.MySQLConn(), tickChan),
+		m.instance.MySQLConn(),
 		mrmsChan,
 		worker,
 		m.clock,
@@ -189,7 +187,7 @@ func (m *MySQLAnalyzer) Stop() error {
 
 	// Stop watching this MySQL instance. Other services watching this MySQL
 	// instance are not affected.
-	m.mrms.Remove(m.protoInstance.UUID, mrmsChan)
+	m.mrms.Remove(m.instance.UUID, mrmsChan)
 
 	return a.Stop()
 }
@@ -210,10 +208,9 @@ func (m *MySQLAnalyzer) GetDefaults(uuid string) map[string]interface{} {
 	}
 
 	// Info from SHOW GLOBAL STATUS
-	mysqlInstance := m.protoInstance
-	mysqlConn := m.mysqlConnFactory.Make(mysqlInstance.DSN)
+	mysqlInstance := m.instance
+	mysqlConn := mysqlInstance.MySQLConn()
 	mysqlConn.Connect()
-	defer mysqlConn.Close()
 	info := config.ReadInfoFromShowGlobalStatus(mysqlConn) // Read current values
 	for k, v := range info {
 		cfg[k] = v

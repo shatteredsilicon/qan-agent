@@ -46,7 +46,6 @@ func (m *MySQL) Check() (bool, error) {
 	if err := m.mysqlConn.Connect(); err != nil {
 		return false, err
 	}
-	defer m.mysqlConn.Close()
 
 	if m.lastUptime == 0 {
 		// First check, just init and return.
@@ -107,7 +106,6 @@ func (m *MySQL) SlowLogChanged() (*bool, error) {
 	if err := m.mysqlConn.Connect(); err != nil {
 		return nil, err
 	}
-	defer m.mysqlConn.Close()
 
 	dbSlowLogBool, err := m.mysqlConn.GetGlobalVarBoolean("slow_query_log")
 	if err != nil {

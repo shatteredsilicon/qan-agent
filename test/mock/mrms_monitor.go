@@ -20,12 +20,12 @@ package mock
 import (
 	"time"
 
-	"github.com/shatteredsilicon/ssm/proto"
+	"github.com/shatteredsilicon/qan-agent/instance"
 )
 
 type MrmsMonitor struct {
 	c        chan interface{}
-	instance proto.Instance
+	instance instance.Instance
 }
 
 func NewMrmsMonitor() *MrmsMonitor {
@@ -33,14 +33,14 @@ func NewMrmsMonitor() *MrmsMonitor {
 	return m
 }
 
-func (m *MrmsMonitor) Add(in proto.Instance) chan interface{} {
+func (m *MrmsMonitor) Add(in instance.Instance) chan interface{} {
 	m.instance = in
 	m.c = make(chan interface{}, 10)
 	return m.c
 }
 
 func (m *MrmsMonitor) Remove(uuid string, c chan interface{}) {
-	m.instance = proto.Instance{}
+	m.instance = instance.Instance{}
 }
 
 func (m *MrmsMonitor) Check() {
