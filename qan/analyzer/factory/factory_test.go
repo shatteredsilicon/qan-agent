@@ -59,12 +59,12 @@ func TestFactory_MakeMongo(t *testing.T) {
 		mrm,
 		instanceRepo,
 	)
-	protoInstance := proto.Instance{}
+	inst := instance.Instance{}
 	serviceName := "plugin"
 	plugin, err := factory.Make(
 		"mongo",
 		serviceName,
-		protoInstance,
+		inst,
 	)
 	require.NoError(t, err)
 
@@ -139,12 +139,12 @@ func TestFactory_MakeMySQL(t *testing.T) {
 		mrm,
 		instanceRepo,
 	)
-	protoInstance := proto.Instance{}
+	inst := instance.Instance{}
 	serviceName := "plugin"
 	plugin, err := factory.Make(
 		"mysql",
 		serviceName,
-		protoInstance,
+		inst,
 	)
 	require.NoError(t, err)
 

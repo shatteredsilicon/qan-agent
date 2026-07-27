@@ -279,7 +279,6 @@ func (a *RealAnalyzer) configureMySQL(action string, tryLimit int, reconfigurate
 		if lastErr != nil {
 			a.logger.Warn(lastErr.Error())
 			a.status.Update(a.name, lastErr.Error())
-			a.mysqlConn.Close()
 			lastErr = nil
 		}
 
@@ -329,7 +328,6 @@ func (a *RealAnalyzer) configureMySQL(action string, tryLimit int, reconfigurate
 
 		// Success
 		a.logger.Debug("configureMySQL:" + action + ":configured")
-		a.mysqlConn.Close()
 		break
 	}
 }
@@ -510,7 +508,6 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 		a.logger.Error(err)
 		return
 	}
-	defer a.mysqlConn.Close()
 
 	defer func() {
 		if err := recover(); err != nil {

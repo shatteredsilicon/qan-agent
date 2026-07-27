@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/query/plugin"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/explain"
 	"github.com/shatteredsilicon/qan-agent/query/plugin/mongo/summary"
@@ -62,13 +63,13 @@ func New() *Mongo {
 }
 
 // Handle executes cmd for given instance and returns resulting data
-func (m *Mongo) Handle(cmd *proto.Cmd, in proto.Instance) (interface{}, error) {
+func (m *Mongo) Handle(cmd *proto.Cmd, in instance.Instance) (interface{}, error) {
 	c, ok := m.cmds[cmd.Cmd]
 	if !ok {
 		return nil, plugin.UnknownCmdError(cmd.Cmd)
 	}
 
-	return c(cmd, in)
+	return c(cmd, in.Instance)
 }
 
 type execFunc func(cmd *proto.Cmd, in proto.Instance) (interface{}, error)

@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
@@ -39,8 +40,8 @@ type TestSuite struct {
 	nullmysql     *mock.NullMySQL
 	logChan       chan proto.LogEntry
 	logger        *pct.Logger
-	instance      proto.Instance
-	emptyInstance proto.Instance
+	instance      instance.Instance
+	emptyInstance instance.Instance
 }
 
 var _ = Suite(&TestSuite{})
@@ -49,10 +50,12 @@ func (s *TestSuite) SetUpSuite(t *C) {
 	s.nullmysql = mock.NewNullMySQL()
 	s.logChan = make(chan proto.LogEntry, 1000)
 	s.logger = pct.NewLogger(s.logChan, "mrms-monitor-test")
-	s.instance = proto.Instance{
-		Subsystem: "mysql",
-		UUID:      "313",
-		DSN:       "",
+	s.instance = instance.Instance{
+		Instance: proto.Instance{
+			Subsystem: "mysql",
+			UUID:      "313",
+			DSN:       "",
+		},
 	}
 }
 

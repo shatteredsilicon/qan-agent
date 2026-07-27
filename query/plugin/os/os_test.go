@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,7 +82,7 @@ func TestHandle(t *testing.T) {
 				t.Parallel()
 
 				cmd, in := f.provider()
-				f.test(o.Handle(cmd, in))
+				f.test(o.Handle(cmd, instance.Instance{Instance: in}))
 			})
 		}
 	})

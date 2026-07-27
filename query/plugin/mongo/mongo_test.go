@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,6 +100,6 @@ func TestHandle(t *testing.T) {
 		},
 	}
 	for _, f := range fs {
-		f.test(m.Handle(f.cmd, f.in))
+		f.test(m.Handle(f.cmd, instance.Instance{Instance: f.in}))
 	}
 }

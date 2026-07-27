@@ -114,7 +114,7 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 
 	// See which type of subsystem this query is for. Right now we only support
 	// MySQL, but this abstraction will make adding other subsystems easy.
-	var in proto.Instance
+	var in instance.Instance
 	if err := json.Unmarshal(cmd.Data, &in); err != nil {
 		return cmd.Reply(nil, err)
 	}

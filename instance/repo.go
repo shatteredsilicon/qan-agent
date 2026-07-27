@@ -27,11 +27,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
-type ByUUID []proto.Instance
+type ByUUID []Instance
 
 func (s ByUUID) Len() int           { return len(s) }
 func (s ByUUID) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
@@ -42,8 +43,24 @@ type Repo struct {
 	instanceDir string
 	api         pct.APIConnector
 	// --
-	instances map[string]proto.Instance
+	instances map[string]Instance
 	mux       *sync.Mutex
+}
+
+type Instance struct {
+	proto.Instance
+	mysqlConn mysql.Connector `json:"-"`
+}
+
+func NewInstance(in proto.Instance) Instance {
+	return Instance{
+		Instance:  in,
+		mysqlConn: mysql.NewConnection(in.DSN),
+	}
+}
+
+func (i Instance) MySQLConn() mysql.Connector {
+	return i.mysqlConn
 }
 
 // Creates a new instance repository and returns a pointer to it
@@ -53,7 +70,7 @@ func NewRepo(logger *pct.Logger, instanceDir string, api pct.APIConnector) *Repo
 		instanceDir: instanceDir,
 		api:         api,
 		// --
-		instances: make(map[string]proto.Instance),
+		instances: make(map[string]Instance),
 		mux:       &sync.Mutex{},
 	}
 	return m
@@ -89,10 +106,10 @@ func (r *Repo) Init() (err error) {
 	return nil
 }
 
-func (r *Repo) List(subsystemName string) []proto.Instance {
+func (r *Repo) List(subsystemName string) []Instance {
 	r.mux.Lock()
 	defer r.mux.Unlock()
-	instances := []proto.Instance{}
+	instances := []Instance{}
 	for _, in := range r.instances {
 		if in.Subsystem == subsystemName {
 			instances = append(instances, in)
@@ -125,12 +142,15 @@ func (r *Repo) add(in proto.Instance, writeToDisk bool) error {
 		r.logger.Info("Added " + in.Subsystem + " " + in.UUID)
 	}
 
-	r.instances[in.UUID] = in
+	r.instances[in.UUID] = Instance{
+		Instance:  in,
+		mysqlConn: mysql.NewConnection(in.DSN),
+	}
 
 	return nil
 }
 
-func (r *Repo) Get(uuid string, cache bool) (proto.Instance, error) {
+func (r *Repo) Get(uuid string, cache bool) (Instance, error) {
 	r.logger.Debug("Get:call")
 	defer r.logger.Debug("Get:return")
 	r.mux.Lock()
@@ -153,7 +173,7 @@ func (r *Repo) Get(uuid string, cache bool) (proto.Instance, error) {
 	}
 
 	// Use low-level add() because we've already locked the mutex.
-	if err := r.add(in, cache); err != nil {
+	if err := r.add(in.Instance, cache); err != nil {
 		return in, fmt.Errorf("Failed to add new instance %s: %s", uuid, err)
 	}
 
@@ -185,8 +205,15 @@ func (r *Repo) update(in proto.Instance, writeToDisk bool) error {
 		r.logger.Info("Added " + in.Subsystem + " " + in.UUID)
 	}
 
-	r.instances[in.UUID] = in
+	inst := Instance{Instance: in}
+	if in.DSN != r.instances[in.UUID].DSN {
+		r.instances[in.UUID].mysqlConn.Close()
+		inst.mysqlConn = mysql.NewConnection(in.DSN)
+	} else {
+		inst.mysqlConn = r.instances[in.UUID].mysqlConn
+	}
 
+	r.instances[in.UUID] = inst
 	return nil
 }
 
@@ -203,6 +230,9 @@ func (r *Repo) Remove(uuid string) error {
 	}
 	r.logger.Info("Removed", file)
 
+	if inst := r.instances[uuid]; inst.mysqlConn != nil {
+		inst.mysqlConn.Close()
+	}
 	delete(r.instances, uuid)
 	r.logger.Info("Removed " + uuid)
 	return nil
@@ -214,7 +244,23 @@ func (r *Repo) SoftRemove(uuid string) error {
 		return err
 	}
 
+	if inst := r.instances[uuid]; inst.mysqlConn != nil {
+		inst.mysqlConn.Close()
+	}
 	delete(r.instances, uuid)
 	in.Deleted = time.Now()
 	return pct.Basedir.WriteInstance(uuid, in)
+}
+
+func (r *Repo) removeAll() error {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+
+	for _, in := range r.instances {
+		if err := r.Remove(in.UUID); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

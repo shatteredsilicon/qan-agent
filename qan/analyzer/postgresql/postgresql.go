@@ -12,6 +12,7 @@ import (
 	"github.com/shatteredsilicon/ssm/proto"
 
 	"github.com/shatteredsilicon/qan-agent/data"
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/postgresql/collector"
@@ -24,7 +25,7 @@ const (
 	DefaultCollectFrom    = "logfile"
 )
 
-func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
+func New(ctx context.Context, inst instance.Instance) analyzer.Analyzer {
 	// Get available services from ctx
 	services, _ := ctx.Value("services").(map[string]interface{})
 
@@ -35,26 +36,26 @@ func New(ctx context.Context, protoInstance proto.Instance) analyzer.Analyzer {
 
 	// return initialized MongoAnalyzer
 	return &PGAnalyzer{
-		protoInstance: protoInstance,
-		spool:         spool,
-		cache:         cache,
-		logger:        logger,
-		stopChan:      make(chan struct{}),
+		instance: inst,
+		spool:    spool,
+		cache:    cache,
+		logger:   logger,
+		stopChan: make(chan struct{}),
 	}
 }
 
 // PGAnalyzer
 type PGAnalyzer struct {
-	protoInstance proto.Instance
-	logger        *pct.Logger
-	spool         data.Spooler
-	cache         data.Cacher
-	collector     collector.Collector
-	config        analyzer.QAN
-	db            *sql.DB
-	sync.RWMutex       // Lock() to protect internal consistency of the service
-	running       bool // Is this service running?
-	stopChan      chan struct{}
+	instance     instance.Instance
+	logger       *pct.Logger
+	spool        data.Spooler
+	cache        data.Cacher
+	collector    collector.Collector
+	config       analyzer.QAN
+	db           *sql.DB
+	sync.RWMutex      // Lock() to protect internal consistency of the service
+	running      bool // Is this service running?
+	stopChan     chan struct{}
 }
 
 // SetConfig sets the config
@@ -88,7 +89,7 @@ func (a *PGAnalyzer) Start() error {
 		return nil
 	}
 
-	dsn := postgresql.FixDSN(a.protoInstance.DSN)
+	dsn := postgresql.FixDSN(a.instance.DSN)
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {

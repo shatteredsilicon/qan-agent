@@ -250,12 +250,8 @@ func (c *Connection) UTCOffset() (time.Duration, time.Duration, error) {
 	var sysHours int64
 	var err error
 
-	if !c.connected {
-		err = c.Connect()
-		if err != nil {
-			return 0, 0, err
-		}
-		defer c.Close()
+	if err = c.Connect(); err != nil {
+		return 0, 0, err
 	}
 
 	// Current time zone (@@session.time_zone)

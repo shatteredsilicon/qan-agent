@@ -51,7 +51,6 @@ func (f *RealIntervalIterFactory) Make(analyzerType string, mysqlConn mysql.Conn
 			if err := mysqlConn.Connect(); err != nil {
 				return "", err
 			}
-			defer mysqlConn.Close()
 			// Slow log file can be absolute or relative. If it's relative,
 			// then prepend the datadir.
 			dataDir, err := mysqlConn.GetGlobalVarString("datadir")

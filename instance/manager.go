@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/percona/go-mysql/dsn"
-	"github.com/shatteredsilicon/qan-agent/mrms"
 	"github.com/shatteredsilicon/qan-agent/mysql"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	"github.com/shatteredsilicon/ssm/proto"
@@ -52,7 +51,7 @@ type Manager struct {
 	stopChan chan struct{}
 }
 
-func NewManager(logger *pct.Logger, instanceDir string, api pct.APIConnector, monitor mrms.Monitor) *Manager {
+func NewManager(logger *pct.Logger, instanceDir string, api pct.APIConnector, mrmsChan chan interface{}) *Manager {
 	repo := NewRepo(pct.NewLogger(logger.LogChan(), "instance-repo"), instanceDir, api)
 
 	m := &Manager{
@@ -61,7 +60,7 @@ func NewManager(logger *pct.Logger, instanceDir string, api pct.APIConnector, mo
 		// --
 		status:   pct.NewStatus([]string{"instance", "instance-repo", "instance-mrms"}),
 		repo:     repo,
-		mrmsChan: monitor.Add(proto.Instance{}),
+		mrmsChan: mrmsChan,
 		stopChan: make(chan struct{}),
 	}
 	return m
@@ -108,13 +107,17 @@ func (m *Manager) Handle(cmd *proto.Cmd) *proto.Reply {
 		err := m.repo.Remove(string(cmd.Data))
 		return cmd.Reply(nil, err)
 	case "GetInfo":
-		var in proto.Instance
+		var in Instance
 		if err := json.Unmarshal(cmd.Data, &in); err != nil {
 			return cmd.Reply(nil, err)
 		}
 		if in.Subsystem != "mysql" {
 			return cmd.Reply(nil, ErrCmdNotSupport)
 		}
+
+		in.mysqlConn = mysql.NewConnection(in.DSN)
+		defer in.mysqlConn.Close()
+
 		err := GetMySQLInfo(&in)
 		return cmd.Reply(in, err)
 	}
@@ -133,19 +136,18 @@ func (m *Manager) Repo() *Repo {
 	return m.repo
 }
 
-func GetMySQLInfo(in *proto.Instance) error {
-	conn := mysql.NewConnection(in.DSN)
-	if err := conn.Connect(); err != nil {
+func GetMySQLInfo(in *Instance) error {
+	if err := in.mysqlConn.Connect(); err != nil {
 		return err
 	}
-	defer conn.Close()
+
 	sql := "SELECT /* ssm-qan-agent */" +
 		" CONCAT_WS('.', @@hostname, IF(@@port='3306',NULL,@@port)) AS Hostname," +
 		" @@version_comment AS Distro," +
 		" @@version AS Version"
 	// Need auxiliary vars because can't get map attribute addresses
 	var hostname, distro, version string
-	if err := conn.DB().QueryRow(sql).Scan(&hostname, &distro, &version); err != nil {
+	if err := in.mysqlConn.DB().QueryRow(sql).Scan(&hostname, &distro, &version); err != nil {
 		return err
 	}
 	in.Distro = distro
@@ -174,13 +176,13 @@ func (m *Manager) monitor() {
 		m.status.Update("instance-mrms", "Idle")
 		select {
 		case data := <-m.mrmsChan:
-			in, ok := data.(proto.Instance)
+			inst, ok := data.(proto.Instance)
 			if !ok {
 				continue
 			}
 
 			// double check if instance exists in repo pool
-			in, err := m.repo.Get(in.UUID, false)
+			in, err := m.repo.Get(inst.UUID, false)
 			if err != nil {
 				m.logger.Warn(fmt.Printf("Got a restart event for instance %s, but it doesn't exists in the instance pool, could be a side-effect of a instance deletion failure, try restart qan-agent", in.UUID))
 				continue
@@ -193,10 +195,13 @@ func (m *Manager) monitor() {
 				m.logger.Warn(fmt.Sprintf("Failed to get MySQL info %s: %s", safeDSN, err))
 				continue
 			}
-			if err := m.updateInstance(in); err != nil {
+			if err := m.updateInstance(in.Instance); err != nil {
 				m.logger.Warn(err)
 			}
 		case <-m.stopChan:
+			if err := m.repo.removeAll(); err != nil {
+				m.logger.Error(err)
+			}
 			return
 		}
 	}
@@ -256,7 +261,7 @@ func (m *Manager) updateMySQLInstances() {
 			m.logger.Warn(fmt.Sprintf("Failed to get MySQL info %s: %s", safeDSN, err))
 			continue
 		}
-		if err := m.updateInstance(in); err != nil {
+		if err := m.updateInstance(in.Instance); err != nil {
 			m.logger.Warn(fmt.Sprintf("Cannot update %s %s (%s): %s", in.Subsystem, in.Name, in.UUID, err))
 		}
 	}

@@ -23,6 +23,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/ssm/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,16 +38,16 @@ func TestHandle(t *testing.T) {
 	m := New()
 
 	fs := []struct {
-		provider func() (cmd *proto.Cmd, in proto.Instance)
+		provider func() (cmd *proto.Cmd, in instance.Instance)
 		test     func(data interface{}, err error)
 	}{
 		// Unknown cmd
 		{
-			func() (*proto.Cmd, proto.Instance) {
+			func() (*proto.Cmd, instance.Instance) {
 				cmd := &proto.Cmd{
 					Cmd: "Unknown",
 				}
-				in := proto.Instance{}
+				in := instance.Instance{}
 				return cmd, in
 			},
 			func(data interface{}, err error) {
@@ -56,7 +57,7 @@ func TestHandle(t *testing.T) {
 		},
 		// Explain
 		{
-			func() (*proto.Cmd, proto.Instance) {
+			func() (*proto.Cmd, instance.Instance) {
 				q := &proto.ExplainQuery{
 					Db:    "mysql",
 					Query: `SELECT 1`,
@@ -67,9 +68,9 @@ func TestHandle(t *testing.T) {
 					Cmd:  "Explain",
 					Data: data,
 				}
-				in := proto.Instance{
+				in := instance.NewInstance(proto.Instance{
 					DSN: dsn,
-				}
+				})
 				return cmd, in
 			},
 			func(data interface{}, err error) {
@@ -83,13 +84,13 @@ func TestHandle(t *testing.T) {
 		},
 		// Summary
 		{
-			func() (*proto.Cmd, proto.Instance) {
+			func() (*proto.Cmd, instance.Instance) {
 				cmd := &proto.Cmd{
 					Cmd: "Summary",
 				}
-				in := proto.Instance{
+				in := instance.NewInstance(proto.Instance{
 					DSN: dsn,
-				}
+				})
 				return cmd, in
 			},
 			func(data interface{}, err error) {
@@ -99,7 +100,7 @@ func TestHandle(t *testing.T) {
 		},
 		// TableInfo
 		{
-			func() (*proto.Cmd, proto.Instance) {
+			func() (*proto.Cmd, instance.Instance) {
 				db := "mysql"
 				table := "user"
 				tables := &proto.TableInfoQuery{
@@ -114,9 +115,9 @@ func TestHandle(t *testing.T) {
 					Data: data,
 				}
 
-				in := proto.Instance{
+				in := instance.NewInstance(proto.Instance{
 					DSN: dsn,
-				}
+				})
 				return cmd, in
 			},
 			func(data interface{}, err error) {

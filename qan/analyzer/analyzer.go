@@ -20,6 +20,7 @@ package analyzer
 import (
 	"strings"
 
+	"github.com/shatteredsilicon/qan-agent/instance"
 	"github.com/shatteredsilicon/ssm/proto"
 	pc "github.com/shatteredsilicon/ssm/proto/config"
 )
@@ -29,7 +30,7 @@ type AnalyzerFactory interface {
 	Make(
 		analyzerType string,
 		analyzerName string,
-		protoInstance proto.Instance,
+		protoInstance instance.Instance,
 	) (Analyzer, error)
 }
 

@@ -70,7 +70,7 @@ func New(
 	return f
 }
 
-func (f *Factory) Make(analyzerType, analyzerName string, protoInstance proto.Instance) (analyzer.Analyzer, error) {
+func (f *Factory) Make(analyzerType, analyzerName string, inst instance.Instance) (analyzer.Analyzer, error) {
 	logger := pct.NewLogger(f.logChan, analyzerName)
 
 	// Expose some global services to plugins
@@ -88,11 +88,11 @@ func (f *Factory) Make(analyzerType, analyzerName string, protoInstance proto.In
 	// for now switch is gonna be enough
 	switch analyzerType {
 	case "mongo":
-		return mongoAnalyzer.New(ctx, protoInstance), nil
+		return mongoAnalyzer.New(ctx, inst), nil
 	case "mysql":
-		return mysqlAnalyzer.New(ctx, protoInstance), nil
+		return mysqlAnalyzer.New(ctx, inst), nil
 	case "postgresql":
-		return postgresqlAnalyzer.New(ctx, protoInstance), nil
+		return postgresqlAnalyzer.New(ctx, inst), nil
 	}
 
 	return nil, UnknownTypeError(analyzerType)
