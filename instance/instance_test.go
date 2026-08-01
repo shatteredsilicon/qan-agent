@@ -88,6 +88,7 @@ func (s *ManagerTestSuite) TestHandleGetInfoMySQL(t *C) {
 	if err := conn.Connect(); err != nil {
 		t.Fatal(err)
 	}
+	defer conn.Close()
 	var hostname, distro, version string
 	sql := "SELECT" +
 		" CONCAT_WS('.', @@hostname, IF(@@port='3306',NULL,@@port)) AS Hostname," +

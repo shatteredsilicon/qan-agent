@@ -21,13 +21,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/Masterminds/semver"
 	"github.com/go-sql-driver/mysql"
 	"github.com/percona/go-mysql/dsn"
+	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/pct"
 )
 
@@ -53,7 +57,6 @@ type Connector interface {
 	Connect() error
 	Close()
 	DB() *sql.DB
-	DSN() string
 	Exec([]string) error
 	GetGlobalVarBoolean(varName string) (varValue sql.NullBool, err error)
 	GetGlobalVarString(varName string) (varValue sql.NullString, err error)
@@ -83,10 +86,6 @@ func (c *Connection) DB() *sql.DB {
 	return c.conn
 }
 
-func (c *Connection) DSN() string {
-	return c.dsn
-}
-
 func (c *Connection) Connect() error {
 	c.Lock()
 	defer c.Unlock()
@@ -96,16 +95,73 @@ func (c *Connection) Connect() error {
 	var err error
 	var db *sql.DB
 
-	// Make logical sql.DB connection, not an actual MySQL connection...
-	db, err = sql.Open("mysql", c.dsn)
+	connStr := c.dsn
+
+	var agentConfig agent.AgentConfig
+	pct.Basedir.ReadConfig("agent", &agentConfig)
+	if emfs := os.Getenv("SSM_EXCLUDE_MONITORING_FROM_SLOWLOG"); emfs != "" {
+		agentConfig.ExcludeMonitoring, _ = strconv.ParseBool(emfs)
+	}
+	if sct := os.Getenv("SSM_SQL_CHECK_TIMEOUT"); sct != "" {
+		agentConfig.SQLCheckTimeout, _ = time.ParseDuration(sct)
+	}
+	if agentConfig.SQLCheckTimeout == 0 {
+		agentConfig.SQLCheckTimeout = agent.DefaultMaxStatementTime
+	}
+
+	if agentConfig.ExcludeMonitoring {
+		dsnParam := fmt.Sprintf("max_execution_time=%d", agentConfig.SQLCheckTimeout.Milliseconds())
+		if strings.Contains(connStr, "?") {
+			connStr = connStr + "&" + dsnParam
+		} else {
+			connStr = connStr + "?" + dsnParam
+		}
+	}
+
+	db, err = sql.Open("mysql", connStr)
 	if err != nil {
-		return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(c.dsn), FormatError(err))
+		return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(connStr), FormatError(err))
 	}
 
 	// Must call sql.DB.Ping to test actual MySQL connection.
 	if err = db.Ping(); err != nil {
 		db.Close()
-		return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(c.dsn), FormatError(err))
+
+		if errCode, ok := err.(*mysql.MySQLError); ok && errCode.Number == 1193 && strings.Contains(err.Error(), "max_execution_time") { // Unknown system variable 'max_execution_time', try 'max_statement_time'
+			connStr = c.dsn
+			dsnParam := fmt.Sprintf("max_statement_time=%f", agentConfig.SQLCheckTimeout.Seconds())
+			if strings.Contains(connStr, "?") {
+				connStr = connStr + "&" + dsnParam
+			} else {
+				connStr = connStr + "?" + dsnParam
+			}
+
+			if db, err = sql.Open("mysql", connStr); err != nil {
+				return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(connStr), FormatError(err))
+			} else if err = db.Ping(); err == nil {
+			} else if errCode, ok := err.(*mysql.MySQLError); ok && errCode.Number == 1193 && strings.Contains(err.Error(), "max_statement_time") {
+				// neither max_execution_time nor max_statement_time is supported
+				db.Close()
+			} else {
+				db.Close()
+				return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(connStr), FormatError(err))
+			}
+		} else {
+			return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(connStr), FormatError(err))
+		}
+	}
+
+	if err != nil { // there was an error but the process is not aborted, let's fall back to original DSN
+		if db, err = sql.Open("mysql", c.dsn); err != nil {
+			return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(c.dsn), FormatError(err))
+		} else if err = db.Ping(); err != nil {
+			return fmt.Errorf("Cannot connect to MySQL %s: %s", dsn.HidePassword(c.dsn), FormatError(err))
+		}
+	} else if agentConfig.ExcludeMonitoring {
+		if _, err := db.Exec("SET SESSION long_query_time = ?", agentConfig.SQLCheckTimeout.Seconds()+1); err != nil {
+			db.Close()
+			return fmt.Errorf("Cannot SET SESSION long_query_time to excluding monitoring queries: %s", FormatError(err))
+		}
 	}
 
 	db.SetConnMaxLifetime(time.Minute * 3)

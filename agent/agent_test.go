@@ -15,7 +15,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>
 */
 
-package agent
+package agent_test
 
 import (
 	"archive/zip"
@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/agent/release"
 	"github.com/shatteredsilicon/qan-agent/pct"
 	pctCmd "github.com/shatteredsilicon/qan-agent/pct/cmd"
@@ -53,8 +54,8 @@ type AgentTestSuite struct {
 	logger  *pct.Logger
 	logChan chan proto.LogEntry
 	// Agent
-	agent        *Agent
-	config       *AgentConfig
+	agent        *agent.Agent
+	config       *agent.AgentConfig
 	services     map[string]pct.ServiceManager
 	servicesMap  map[string]pct.ServiceManager
 	client       *mock.WebsocketClient
@@ -90,7 +91,7 @@ func (s *AgentTestSuite) SetUpSuite(t *C) {
 	s.logger = pct.NewLogger(s.logChan, "agent-test")
 
 	// Agent
-	s.config = &AgentConfig{
+	s.config = &agent.AgentConfig{
 		Agent: &pc.Agent{
 			UUID:        "abc-123-def",
 			ApiHostname: "http://localhost",
@@ -135,7 +136,7 @@ func (s *AgentTestSuite) SetUpTest(t *C) {
 	}
 
 	// Run the agent.
-	s.agent = NewAgent(s.config, s.logger, s.client, "http://localhost", s.servicesMap)
+	s.agent = agent.NewAgent(s.config, s.logger, s.client, "http://localhost", s.servicesMap)
 	s.agentRunning = true
 
 	go func() {
@@ -481,7 +482,7 @@ func (s *AgentTestSuite) TestLoadConfig(t *C) {
 		t.Fatalf("cannot copy config file %s to %s : %s", sampleConfig, s.configFile, err.Error())
 	}
 
-	bytes, err := LoadConfig()
+	bytes, err := agent.LoadConfig()
 	t.Assert(err, IsNil)
 	got := &pc.Agent{}
 	if err := json.Unmarshal(bytes, got); err != nil {
@@ -490,7 +491,7 @@ func (s *AgentTestSuite) TestLoadConfig(t *C) {
 	expect := &pc.Agent{
 		UUID:        "abc-123-def",
 		ApiHostname: "localhost",
-		Keepalive:   DEFAULT_KEEPALIVE,
+		Keepalive:   agent.DEFAULT_KEEPALIVE,
 	}
 	assert.Equal(t, expect, got)
 
@@ -500,7 +501,7 @@ func (s *AgentTestSuite) TestLoadConfig(t *C) {
 	if err != nil {
 		t.Fatalf("cannot copy config file %s to %s : %s", sampleConfig, s.configFile, err.Error())
 	}
-	bytes, err = LoadConfig()
+	bytes, err = agent.LoadConfig()
 	t.Assert(err, IsNil)
 	got = &pc.Agent{}
 	if err := json.Unmarshal(bytes, got); err != nil {
@@ -509,7 +510,7 @@ func (s *AgentTestSuite) TestLoadConfig(t *C) {
 	expect = &pc.Agent{
 		ApiHostname: "agent hostname",
 		UUID:        "agent uuid",
-		Keepalive:   DEFAULT_KEEPALIVE,
+		Keepalive:   agent.DEFAULT_KEEPALIVE,
 	}
 	assert.Equal(t, expect, got)
 }
@@ -827,7 +828,7 @@ func (s *AgentTestSuite) TestRestart(t *C) {
 		os.Remove(pct.Basedir.File("start-script"))
 	}()
 
-	newAgent := NewAgent(s.config, s.logger, s.client, "localhost", s.servicesMap)
+	newAgent := agent.NewAgent(s.config, s.logger, s.client, "localhost", s.servicesMap)
 	doneChan := make(chan error, 1)
 	go func() {
 		doneChan <- newAgent.Run()
