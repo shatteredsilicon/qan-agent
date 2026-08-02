@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/shatteredsilicon/qan-agent/agent"
 	"github.com/shatteredsilicon/qan-agent/bin/ssm-qan-agent-installer/installer"
@@ -47,6 +48,9 @@ var (
 
 	flagHostname       string
 	flagManagedAPIPath string
+
+	flagExcludeMonitoringFromSlowlog bool
+	flagSQLCheckTimeout              time.Duration
 )
 
 var fs *flag.FlagSet
@@ -65,6 +69,9 @@ func init() {
 	fs.BoolVar(&flagUseSSL, "use-ssl", false, "Use ssl to connect to the API")
 	fs.BoolVar(&flagUseInsecureSSL, "use-insecure-ssl", false, "Use self signed certs when connecting to the API")
 	fs.StringVar(&flagManagedAPIPath, "managed-api-path", "managed", "ssm-managed api path")
+
+	fs.BoolVar(&flagExcludeMonitoringFromSlowlog, "exclude-monitoring-from-slowlog", false, "whether to exclude monitoring queries from slow log")
+	fs.DurationVar(&flagSQLCheckTimeout, "sql-check-timeout", agent.DefaultMaxStatementTime, "maximum time for running the quries")
 
 	hostname, _ := os.Hostname()
 	fs.StringVar(&flagHostname, "hostname", hostname, "OS instance hostname, defaults to local hostname")
@@ -108,7 +115,9 @@ func main() {
 			ServerSSL:         flagUseSSL,
 			ServerInsecureSSL: flagUseInsecureSSL,
 		},
-		ManagedAPIPath: flagManagedAPIPath,
+		ManagedAPIPath:    flagManagedAPIPath,
+		ExcludeMonitoring: flagExcludeMonitoringFromSlowlog,
+		SQLCheckTimeout:   flagSQLCheckTimeout,
 	}
 
 	flags := installer.Flags{

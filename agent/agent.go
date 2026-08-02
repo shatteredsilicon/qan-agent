@@ -57,6 +57,10 @@ var (
 	ErrStop = errors.New("received Stop command")
 )
 
+var (
+	DefaultMaxStatementTime = 5 * time.Second
+)
+
 type Agent struct {
 	config    *AgentConfig
 	configMux *sync.RWMutex
@@ -79,7 +83,9 @@ type Agent struct {
 
 type AgentConfig struct {
 	*pc.Agent
-	ManagedAPIPath string
+	ManagedAPIPath    string
+	ExcludeMonitoring bool          `json:",omitempty"`
+	SQLCheckTimeout   time.Duration `json:",omitempty"`
 }
 
 type CollectInfoData struct {

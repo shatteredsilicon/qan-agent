@@ -98,10 +98,6 @@ func (m *MySQL) Check() (bool, error) {
 	return false, nil
 }
 
-func (m *MySQL) DSN() string {
-	return m.mysqlConn.DSN()
-}
-
 func (m *MySQL) SlowLogChanged() (*bool, error) {
 	if err := m.mysqlConn.Connect(); err != nil {
 		return nil, err
