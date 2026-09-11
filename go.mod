@@ -1,6 +1,6 @@
 module github.com/shatteredsilicon/qan-agent
 
-go 1.26.5
+go 1.26.7
 
 require (
 	github.com/Masterminds/semver v1.4.2
@@ -22,9 +22,9 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.mongodb.org/mongo-driver v1.17.7
 	go4.org v0.0.0-20260112195520-a5071408f32f
-	golang.org/x/net v0.57.0
+	golang.org/x/net v0.59.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
-	vitess.io/vitess v0.23.3
+	vitess.io/vitess v0.23.6
 )
 
 require (
@@ -60,12 +60,12 @@ require (
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260807164820-c8921c73eeea // indirect
-	google.golang.org/grpc v1.83.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260908043556-f8649ddbbfe6 // indirect
+	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
