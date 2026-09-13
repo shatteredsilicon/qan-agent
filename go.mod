@@ -1,6 +1,6 @@
 module github.com/shatteredsilicon/qan-agent
 
-go 1.26.4
+go 1.25.11
 
 require (
 	github.com/Masterminds/semver v1.4.2
