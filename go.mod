@@ -1,8 +1,6 @@
 module github.com/shatteredsilicon/qan-agent
 
-go 1.23.8
-
-toolchain go1.24.2
+go 1.23.12
 
 require (
 	github.com/Masterminds/semver v1.4.2
@@ -20,7 +18,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/shatteredsilicon/ssm v0.0.0-20250716161023-a4554c8f2a4c
 	github.com/stretchr/testify v1.9.0
-	go.mongodb.org/mongo-driver v1.13.1
+	go.mongodb.org/mongo-driver v1.17.7
 	go4.org v0.0.0-20180417224846-9599cf28b011
 	golang.org/x/net v0.36.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
@@ -49,7 +47,7 @@ require (
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
-	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
