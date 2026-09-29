@@ -59,7 +59,6 @@ func (i *Iter) Start() {
 func (i *Iter) Stop() {
 	i.sync.Stop()
 	i.sync.Wait()
-	return
 }
 
 func (i *Iter) IntervalChan() chan *iter.Interval {

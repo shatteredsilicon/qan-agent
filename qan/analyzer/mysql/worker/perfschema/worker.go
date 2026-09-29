@@ -458,8 +458,14 @@ func (w *Worker) Setup(_ mysql.Connector, interval *iter.Interval, resultChan ch
 }
 
 func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
-	w.logger.Debug("Run:call:", w.iter.Number)
-	defer w.logger.Debug("Run:return:", w.iter.Number)
+	return w.RunWithMaxQueryTime(mysqlConn, 0)
+}
+
+func (w *Worker) RunWithMaxQueryTime(mysqlConn mysql.Connector, maxQueryTime float64) (*report.Result, error) {
+	if w.iter != nil {
+		w.logger.Debug("Run:call:", w.iter.Number)
+		defer w.logger.Debug("Run:return:", w.iter.Number)
+	}
 
 	defer w.status.Update(w.name, "Idle")
 
@@ -474,7 +480,7 @@ func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
 		return nil, nil
 	}
 
-	res, err := w.prepareResult(w.digests.All, w.digests.Curr, w.digests.PreStmtCurr)
+	res, err := w.prepareResult(w.digests.All, w.digests.Curr, w.digests.PreStmtCurr, maxQueryTime)
 	if err != nil {
 		w.lastErr = err
 		return nil, err
@@ -579,8 +585,10 @@ func (w *Worker) getQueryExamples(mysqlConn mysql.Connector, ticker <-chan time.
 }
 
 func (w *Worker) getSnapshot(mysqlConn mysql.Connector) (Snapshot, Snapshot, error) {
-	w.logger.Debug("getSnapshot:call:", w.iter.Number)
-	defer w.logger.Debug("getSnapshot:return:", w.iter.Number)
+	if w.iter != nil {
+		w.logger.Debug("getSnapshot:call:", w.iter.Number)
+		defer w.logger.Debug("getSnapshot:return:", w.iter.Number)
+	}
 
 	w.status.Update(w.name, "Processing rows")
 	defer w.status.Update(w.name, "Idle")
@@ -684,9 +692,11 @@ func (w *Worker) getSnapshot(mysqlConn mysql.Connector) (Snapshot, Snapshot, err
 	return curr, preStmtCurr, err
 }
 
-func (w *Worker) prepareResult(prev, curr, preStmtCurr Snapshot) (*report.Result, error) {
-	w.logger.Debug("prepareResult:call:", w.iter.Number)
-	defer w.logger.Debug("prepareResult:return:", w.iter.Number)
+func (w *Worker) prepareResult(prev, curr, preStmtCurr Snapshot, maxQueryTime float64) (*report.Result, error) {
+	if w.iter != nil {
+		w.logger.Debug("prepareResult:call:", w.iter.Number)
+		defer w.logger.Debug("prepareResult:return:", w.iter.Number)
+	}
 
 	w.status.Update(w.name, "Preparing result")
 	defer w.status.Update(w.name, "Idle")
@@ -724,6 +734,11 @@ func (w *Worker) prepareResult(prev, curr, preStmtCurr Snapshot) (*report.Result
 			// Check if it executed during the interval.
 			if row.CountStar == prevRow.CountStar {
 				continue RowLoop // not executed during interval
+			}
+
+			// Check if it's a row that another harvesting method (only slowlog for now) covers
+			if maxQueryTime > 0 && float64(row.MaxTimerWait)*math.Pow10(-12) >= maxQueryTime {
+				continue RowLoop
 			}
 
 			// If current value of CountStart (number of queries)

@@ -21,6 +21,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/shatteredsilicon/qan-agent/mysql"
@@ -123,10 +124,15 @@ func ValidateConfig(setConfig analyzer.QAN) (analyzer.QAN, error) {
 	// Set UUID.
 	runConfig.UUID = setConfig.UUID
 
-	// Strings
-	if setConfig.CollectFrom != "slowlog" && setConfig.CollectFrom != "perfschema" && setConfig.CollectFrom != "rds-slowlog" {
-		return runConfig, fmt.Errorf("CollectFrom must be 'slowlog' or 'perfschema'")
+	for _, cf := range setConfig.MySQLCollectFrom {
+		if cf != "slowlog" && cf != "perfschema" && cf != "rds-slowlog" {
+			return runConfig, fmt.Errorf("CollectFrom '%s' is not supported", cf)
+		}
 	}
+	if slices.Contains(setConfig.MySQLCollectFrom, "slowlog") && slices.Contains(setConfig.MySQLCollectFrom, "rds-slowlog") {
+		return runConfig, fmt.Errorf("CollectFrom 'slowlog' and 'rds-slowlog' can't be set together")
+	}
+	runConfig.MySQLCollectFrom = setConfig.MySQLCollectFrom
 	runConfig.CollectFrom = setConfig.CollectFrom
 
 	// Integers

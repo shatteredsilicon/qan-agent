@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/shatteredsilicon/qan-agent/data"
@@ -123,15 +124,21 @@ func (m *MySQLAnalyzer) Start() error {
 	name := m.logger.Service()
 	logChan := m.logger.LogChan()
 	var worker worker.Worker
-	analyzerType := config.CollectFrom
-	switch analyzerType {
-	case "slowlog":
-		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, m.instance.MySQLConn(), m.mrms)
-	case "perfschema":
-		worker = m.perfschemaWorkerFactory.Make(name+"-worker", config)
-	case "rds-slowlog":
+	var analyzerType string
+	if slices.Contains(config.MySQLCollectFrom, "slowlog") {
+		analyzerType = "slowlog"
+		var perfschemaWorker *perfschema.Worker
+		if slices.Contains(config.MySQLCollectFrom, "perfschema") {
+			perfschemaWorker = m.perfschemaWorkerFactory.Make(name+"-worker", config)
+		}
+		worker = m.slowlogWorkerFactory.Make(name+"-worker", config, m.instance.MySQLConn(), m.mrms, perfschemaWorker)
+	} else if slices.Contains(config.MySQLCollectFrom, "rds-slowlog") {
+		analyzerType = "rds-slowlog"
 		worker = m.rdsSlowlogWorkerFactory.Make(name+"-worker", config, m.instance.MySQLConn())
-	default:
+	} else if slices.Contains(config.MySQLCollectFrom, "perfschema") {
+		analyzerType = "perfschema"
+		worker = m.perfschemaWorkerFactory.Make(name+"-worker", config)
+	} else {
 		panic("Invalid analyzerType: " + analyzerType)
 	}
 	worker.SetConfig(m.instance.MySQLConn(), config)

@@ -351,7 +351,7 @@ func (s *AnalyzerTestSuite) TestRealSlowLogWorker(t *C) {
 
 	logger := pct.NewLogger(s.logChan, "qan-analyzer")
 	mrmsMonitor := mrms.NewRealMonitor(logger, &mysql.RealConnectionFactory{})
-	worker := slowlog.NewWorker(pct.NewLogger(s.logChan, "qan-worker"), config, realmysql, mrmsMonitor)
+	worker := slowlog.NewWorker(pct.NewLogger(s.logChan, "qan-worker"), config, realmysql, mrmsMonitor, nil)
 	//intervalChan := make(chan *iter.Interval, 1)
 	//iter := mock.NewIter(intervalChan)
 
