@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"time"
 
@@ -34,13 +35,14 @@ import (
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/iter"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/log"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/query"
+	"github.com/shatteredsilicon/qan-agent/qan/analyzer/mysql/worker/perfschema"
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer/report"
 	"github.com/shatteredsilicon/qan-agent/util"
 	"github.com/shatteredsilicon/ssm/proto"
 )
 
 type WorkerFactory interface {
-	Make(name string, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor) *Worker
+	Make(name string, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor, perfschemaWorker *perfschema.Worker) *Worker
 }
 
 type RealWorkerFactory struct {
@@ -54,8 +56,8 @@ func NewRealWorkerFactory(logChan chan proto.LogEntry) *RealWorkerFactory {
 	return f
 }
 
-func (f *RealWorkerFactory) Make(name string, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor) *Worker {
-	return NewWorker(pct.NewLogger(f.logChan, name), config, mysqlConn, mrmsMonitor)
+func (f *RealWorkerFactory) Make(name string, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor, perfschemaWorker *perfschema.Worker) *Worker {
+	return NewWorker(pct.NewLogger(f.logChan, name), config, mysqlConn, mrmsMonitor, perfschemaWorker)
 }
 
 // --------------------------------------------------------------------------
@@ -67,6 +69,8 @@ type Job struct {
 	EndOffset      int64
 	ExampleQueries bool
 	RetainSlowLogs int
+	StartTime      time.Time
+	StopTime       time.Time
 }
 
 func (j *Job) String() string {
@@ -94,9 +98,11 @@ type Worker struct {
 	outlierTime     float64
 	resultChan      chan *report.Result
 	mrms            mrms.Monitor
+
+	perfschemaWorker *perfschema.Worker
 }
 
-func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor) *Worker {
+func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connector, mrmsMonitor mrms.Monitor, perfschemaWorker *perfschema.Worker) *Worker {
 	// By default replace numbers in words with ?
 	query.ReplaceNumbersInWords = true
 
@@ -122,17 +128,18 @@ func NewWorker(logger *pct.Logger, config analyzer.QAN, mysqlConn mysql.Connecto
 		logger: logger,
 		config: config,
 		// --
-		name:            name,
-		status:          pct.NewStatus([]string{name}),
-		queryChan:       make(chan string, 1),
-		fingerprintChan: make(chan string, 1),
-		errChan:         make(chan interface{}, 1),
-		doneChan:        make(chan bool, 1),
-		oldSlowLogs:     make(map[int]string),
-		sync:            pct.NewSyncChan(),
-		utcOffset:       utcOffset,
-		outlierTime:     outlierTime.Float64,
-		mrms:            mrmsMonitor,
+		name:             name,
+		status:           pct.NewStatus([]string{name}),
+		queryChan:        make(chan string, 1),
+		fingerprintChan:  make(chan string, 1),
+		errChan:          make(chan interface{}, 1),
+		doneChan:         make(chan bool, 1),
+		oldSlowLogs:      make(map[int]string),
+		sync:             pct.NewSyncChan(),
+		utcOffset:        utcOffset,
+		outlierTime:      outlierTime.Float64,
+		mrms:             mrmsMonitor,
+		perfschemaWorker: perfschemaWorker,
 	}
 	return w
 }
@@ -170,10 +177,17 @@ func (w *Worker) Setup(mysqlConn mysql.Connector, interval *iter.Interval, resul
 		EndOffset:      interval.EndOffset,
 		ExampleQueries: util.ValueOf(w.config.ExampleQueries),
 		RetainSlowLogs: util.ValueOf(w.config.RetainSlowLogs),
+		StartTime:      interval.StartTime,
+		StopTime:       interval.StopTime,
 	}
 	w.logger.Debug("Setup:", w.job)
 
 	w.resultChan = resultChan
+
+	if w.perfschemaWorker != nil {
+		return w.perfschemaWorker.Setup(mysqlConn, interval, resultChan)
+	}
+
 	return nil
 }
 
@@ -199,6 +213,26 @@ func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
 		return nil, err
 	}
 	defer file.Close()
+
+	var longQueryTime float64
+	var slowlogEnabled bool
+	if w.perfschemaWorker != nil {
+		slowQueryLog, err := mysqlConn.GetGlobalVarBoolean("slow_query_log")
+		if err != nil {
+			return nil, err
+		} else {
+			slowlogEnabled = slowQueryLog.Bool
+		}
+
+		if slowlogEnabled {
+			longQueryTimeVar, err := mysqlConn.GetGlobalVarNumeric("long_query_time")
+			if err != nil {
+				return nil, err
+			} else {
+				longQueryTime = longQueryTimeVar.Float64
+			}
+		}
+	}
 
 	// Create a slow log parser and run it.  It sends log.Event via its channel.
 	// Be sure to stop it when done, else we'll leak goroutines.
@@ -258,6 +292,35 @@ func (w *Worker) Run(mysqlConn mysql.Connector) (*report.Result, error) {
 	// fix the fingerprinter.
 	go w.fingerprinter()
 	defer func() { w.doneChan <- true }()
+
+	perfschemaResultChan := make(chan *report.Result, 1)
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				w.logger.Error(fmt.Sprintf("Combining perfschema harvesting in slowlog harvesting %s crashed: %s", w.job, err))
+				debug.PrintStack()
+			}
+
+			close(perfschemaResultChan)
+		}()
+
+		if w.perfschemaWorker == nil || (slowlogEnabled && longQueryTime <= 0) {
+			return
+		}
+
+		result, err := w.perfschemaWorker.RunWithMaxQueryTime(mysqlConn, longQueryTime)
+		if err != nil {
+			w.logger.Error(err)
+			return
+		}
+		if result == nil {
+			return
+		}
+
+		result.StartTime = w.job.StartTime
+		result.EndTime = w.job.StopTime
+		perfschemaResultChan <- result
+	}()
 
 	t0 := time.Now().UTC()
 EVENT_LOOP:
@@ -369,6 +432,8 @@ EVENT_LOOP:
 	}
 
 	w.logger.Info(fmt.Sprintf("Parsed %s: %s", w.job, progress))
+
+	w.resultChan <- <-perfschemaResultChan
 	return nil, nil
 }
 
@@ -385,6 +450,11 @@ func (w *Worker) Stop() error {
 func (w *Worker) Cleanup() error {
 	w.logger.Debug("Cleanup:call")
 	defer w.logger.Debug("Cleanup:return")
+
+	if w.perfschemaWorker != nil {
+		return w.perfschemaWorker.Cleanup()
+	}
+
 	return nil
 }
 
@@ -392,8 +462,11 @@ func (w *Worker) Status() map[string]string {
 	return w.status.All()
 }
 
-func (w *Worker) SetConfig(_ mysql.Connector, config analyzer.QAN) {
+func (w *Worker) SetConfig(mysqlConn mysql.Connector, config analyzer.QAN) {
 	w.config = config
+	if w.perfschemaWorker != nil {
+		w.perfschemaWorker.SetConfig(mysqlConn, config)
+	}
 }
 
 func (w *Worker) SetLogParser(p log.LogParser) {

@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"regexp"
+	"slices"
 
 	"github.com/shatteredsilicon/qan-agent/qan/analyzer"
 )
@@ -10,15 +11,14 @@ import (
 var logHeaderRe = regexp.MustCompile(`^#\s*[A-Z]`)
 
 func GetMySQLConfig(config analyzer.QAN) ([]string, []string, error) {
-	switch config.CollectFrom {
-	case "slowlog":
+	if slices.Contains(config.MySQLCollectFrom, "slowlog") {
 		return makeSlowLogConfig()
-	case "rds-slowlog":
+	} else if slices.Contains(config.MySQLCollectFrom, "rds-slowlog") {
 		return makeRDSSlowLogConfig()
-	case "perfschema":
+	} else if slices.Contains(config.MySQLCollectFrom, "perfschema") {
 		return makePerfSchemaConfig()
-	default:
-		return nil, nil, fmt.Errorf("invalid CollectFrom: '%s'; expected 'slowlog' or 'perfschema'", config.CollectFrom)
+	} else {
+		return nil, nil, fmt.Errorf("invalid CollectFrom: '%s'", config.CollectFrom)
 	}
 }
 

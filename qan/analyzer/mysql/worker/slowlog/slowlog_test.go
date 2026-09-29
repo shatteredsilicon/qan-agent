@@ -110,7 +110,7 @@ func (s *WorkerTestSuite) SetUpTest(t *C) {
 }
 
 func (s *WorkerTestSuite) RunWorker(config analyzer.QAN, mysqlConn mysql.Connector, i *iter.Interval) (*report.Result, error) {
-	w := NewWorker(s.logger, config, mysqlConn, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}))
+	w := NewWorker(s.logger, config, mysqlConn, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}), nil)
 	w.ZeroRunTime = true
 	resultChan := make(chan *report.Result)
 	w.Setup(mysqlConn, i, resultChan)
@@ -313,7 +313,7 @@ func (s *WorkerTestSuite) TestRotateAndRemoveSlowLog(t *C) {
 			CollectFrom: "slowlog",
 		},
 	}
-	w := NewWorker(s.logger, config, s.nullmysql, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}))
+	w := NewWorker(s.logger, config, s.nullmysql, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}), nil)
 
 	// Make copy of slow log because test will mv/rename it.
 	cp := exec.Command("cp", inputDir+slowlogFile, "/tmp/"+slowlogFile)
@@ -429,7 +429,7 @@ func (s *WorkerTestSuite) TestRotateSlowLog(t *C) {
 			CollectFrom: "slowlog",
 		},
 	}
-	w := NewWorker(s.logger, config, s.nullmysql, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}))
+	w := NewWorker(s.logger, config, s.nullmysql, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}), nil)
 
 	// Make copy of slow log because test will mv/rename it.
 	cp := exec.Command("cp", inputDir+slowlogFile, "/tmp/"+slowlogFile)
@@ -599,7 +599,7 @@ func (s *WorkerTestSuite) TestRotateRealSlowLog(t *C) {
 			CollectFrom: "slowlog",
 		},
 	}
-	w := NewWorker(s.logger, config, conn, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}))
+	w := NewWorker(s.logger, config, conn, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}), nil)
 
 	// First interval: 0 - 736
 	now := time.Now()
@@ -683,7 +683,7 @@ func (s *WorkerTestSuite) TestStop(t *C) {
 			CollectFrom:    "slowlog",
 		},
 	}
-	w := NewWorker(s.logger, config, s.nullmysql, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}))
+	w := NewWorker(s.logger, config, s.nullmysql, mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}), nil)
 
 	// Make and set a mock log.LogParser. The worker will use this once when
 	// Start() is called instead of making a real slow log parser.
@@ -777,7 +777,7 @@ func (s *WorkerTestSuite) TestResult014(t *C) {
 		},
 	}
 	logChan := make(chan proto.LogEntry, 1000)
-	w := NewWorker(pct.NewLogger(logChan, "w"), config, mock.NewNullMySQL(), mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}))
+	w := NewWorker(pct.NewLogger(logChan, "w"), config, mock.NewNullMySQL(), mrms.NewRealMonitor(s.logger, &mysql.RealConnectionFactory{}), nil)
 	i := &iter.Interval{
 		Filename:    inputDir + "slow014.log",
 		StartOffset: 0,

@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -236,7 +237,7 @@ func (a *RealAnalyzer) setMySQLConfig() error {
 		return err
 	}
 
-	if a.config.CollectFrom == "slowlog" && !util.ValueOf(a.config.SlowLogManuallyOFF) {
+	if slices.Contains(a.config.MySQLCollectFrom, "slowlog") && !util.ValueOf(a.config.SlowLogManuallyOFF) {
 		// if it's slowlog harvesting and @@slow_query_log
 		// is not set to OFF manually during the QAN runtime,
 		// we should set slow_query_log ON automatically
@@ -418,7 +419,7 @@ func (a *RealAnalyzer) run() {
 
 			if interval.StartTime.After(lastTs) {
 				t0 := interval.StartTime.Format("2006-01-02 15:04:05")
-				if a.config.CollectFrom == "slowlog" || a.config.CollectFrom == "rds-slowlog" {
+				if slices.Contains(a.config.MySQLCollectFrom, "slowlog") || slices.Contains(a.config.MySQLCollectFrom, "rds-slowlog") {
 					t1 := interval.StopTime.Format("15:04:05 MST")
 					a.status.Update(a.name+"-last-interval", fmt.Sprintf("%s to %s", t0, t1))
 				} else {
@@ -473,7 +474,7 @@ func (a *RealAnalyzer) run() {
 			if isSlowLogData {
 				slowlogOFF := !SlowLogON
 				a.config.SlowLogManuallyOFF = &slowlogOFF
-				if a.config.CollectFrom == "rds-slowlog" || a.config.CollectFrom == "slowlog" {
+				if slices.Contains(a.config.MySQLCollectFrom, "rds-slowlog") || slices.Contains(a.config.MySQLCollectFrom, "slowlog") {
 					a.setMySQLConfig()
 					a.worker.SetConfig(a.mysqlConn, a.config)
 				}
@@ -521,7 +522,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 	}()
 
 	var resultChan chan *report.Result
-	if a.config.CollectFrom == "rds-slowlog" || a.config.CollectFrom == "slowlog" {
+	if slices.Contains(a.config.MySQLCollectFrom, "rds-slowlog") || slices.Contains(a.config.MySQLCollectFrom, "slowlog") {
 		resultChan = make(chan *report.Result)
 	}
 
@@ -541,7 +542,7 @@ func (a *RealAnalyzer) runWorker(interval *iter.Interval) {
 	}()
 
 	t0 := time.Now()
-	if a.config.CollectFrom == "rds-slowlog" || a.config.CollectFrom == "slowlog" {
+	if slices.Contains(a.config.MySQLCollectFrom, "rds-slowlog") || slices.Contains(a.config.MySQLCollectFrom, "slowlog") {
 		go func() {
 			defer func() {
 				close(resultChan)

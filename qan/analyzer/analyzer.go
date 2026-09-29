@@ -18,6 +18,7 @@
 package analyzer
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/shatteredsilicon/qan-agent/instance"
@@ -58,7 +59,23 @@ type Analyzer interface {
 type QAN struct {
 	pc.QAN
 	// mysql specific options
-	SlowLogManuallyOFF *bool `json:",omitempty"`
+	SlowLogManuallyOFF *bool    `json:",omitempty"`
+	MySQLCollectFrom   []string `json:"-"`
+}
+
+func (q *QAN) UnmarshalJSON(data []byte) error {
+	type Alias QAN
+
+	v := (*Alias)(q)
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+
+	for _, cf := range strings.Split(q.CollectFrom, ",") {
+		q.MySQLCollectFrom = append(q.MySQLCollectFrom, strings.TrimSpace(cf))
+	}
+
+	return nil
 }
 
 func (q QAN) IsQueryOmitted(fingerprint string) bool {
