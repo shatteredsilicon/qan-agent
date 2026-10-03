@@ -24,7 +24,7 @@ require (
 	go4.org v0.0.0-20260112195520-a5071408f32f
 	golang.org/x/net v0.59.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
-	vitess.io/vitess v0.23.6
+	vitess.io/vitess v0.23.7
 )
 
 require (
